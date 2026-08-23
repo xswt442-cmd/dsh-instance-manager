@@ -19,7 +19,7 @@ DSH 常驻插件：侧边栏底部 **「dsh 管理」** 按钮，弹出浮动面
 
 ```powershell
 # 方式一：Git 依赖直装（推荐，无需本地 clone，重启 DSH 生效）
-dsh plugin --profile web add "github:YOUR_ACCOUNT/dsh-easy-port-manager"
+dsh plugin --profile web add "github:xswt442-cmd/dsh-easy-port-manager"
 
 # 方式二：本地 link（开发调试）
 dsh plugin --profile web add "E:\path\to\dsh-easy-port-manager"

@@ -16,7 +16,7 @@ A persistent DSH plugin: a **dsh 管理** button at the sidebar foot opens a flo
 ## Install
 
 ```powershell
-dsh plugin --profile web add "github:YOUR_ACCOUNT/dsh-easy-port-manager"
+dsh plugin --profile web add "github:xswt442-cmd/dsh-easy-port-manager"
 ```
 
 > Restart DSH Web afterwards.
