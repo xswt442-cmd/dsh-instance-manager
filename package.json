@@ -1,7 +1,7 @@
 {
     "name":  "dsh-easy-port-manager",
-    "version":  "0.4.0",
-    "description":  "DSH 绠＄悊: sidebar button + floating panel listing every dsh web instance on ports 3080-3129 (port, PID, live status) with graceful one-click stop, including Task-Manager-style stop of the current instance.",
+    "version":  "0.4.1",
+    "description":  "DSH 缁狅紕鎮? sidebar button + floating panel listing every dsh web instance on ports 3080-3129 (port, PID, live status) with graceful one-click stop, including Task-Manager-style stop of the current instance.",
     "type":  "module",
     "main":  "lib/index.js",
     "exports":  {
