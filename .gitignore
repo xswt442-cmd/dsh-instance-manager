@@ -2,4 +2,4 @@ node_modules/
 *.log
 test-*
 .DS_Store
-test1.*
+test1.*test1.txt
