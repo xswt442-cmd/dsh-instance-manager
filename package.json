@@ -1,0 +1,41 @@
+{
+  "name": "dsh-easy-port-manager",
+  "version": "0.3.0",
+  "description": "DSH 管理: sidebar button + floating panel listing every dsh web instance on ports 3080-3129 (port, PID, live status) with graceful one-click stop, including Task-Manager-style stop of the current instance.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_ACCOUNT/dsh-easy-port-manager.git"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek",
+    "dsh-plugin",
+    "port-manager",
+    "process-manager"
+  ],
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md"
+  ],
+  "license": "MIT"
+}
