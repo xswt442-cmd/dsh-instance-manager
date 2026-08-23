@@ -68,9 +68,12 @@ jobs:
         env:
           DSH_HOME: ${{ runner.temp }}\dshhome
         run: |
-          $dshBin = "$env:DSH_HOME\profiles\web\node_modules\@deepseek-ai\dsh\lib\bin.js"
+          # resolve the globally installed dsh CLI binary (the profile does not
+          # contain @deepseek-ai/dsh itself on a fresh machine)
+          $globalRoot = (& npm root -g).Trim()
+          $dshBin = Join-Path $globalRoot "@deepseek-ai\dsh\lib\bin.js"
           if (-not (Test-Path $dshBin)) { Write-Error "dsh bin not found at $dshBin" }
-          $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList $dshBin, "web", "--port", "3129" -WindowStyle Hidden -PassThru
+          $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", "web", "--port", "3129" -WindowStyle Hidden -PassThru
           $ready = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 1
