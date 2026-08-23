@@ -2,16 +2,18 @@
 
 > [中文](./README.md) | English
 
-A persistent DSH plugin: a **dsh 管理** button at the sidebar foot opens a floating panel that lists every dsh web instance running on local ports 3080–3129, with one-click graceful stop — including a Task-Manager-style stop of the current instance. Zero external processes: discovery is peer-to-peer over HTTP, and stopping asks the target instance to exit through the harness's own graceful `appExit` shutdown (sessions are flushed properly).
+A DSH plugin that adds a **dsh 管理** entry to the sidebar foot. It opens a floating panel listing every dsh web instance on local ports 3080–3129 (port / PID / status) and can stop a selected instance.
+
+Instance discovery happens over HTTP between local instances; stopping sends a request to the target, which exits through the harness's `appExit` shutdown while sessions are written to disk as usual. No child processes are spawned.
 
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 
 ## Features
 
-- **Instance overview**: port (click to open), PID, status badge (current session / running / non-DSH service), auto-refresh every 4s.
-- **One-click stop**: politely asks the target instance to exit gracefully; automatically disabled for legacy instances without this bundle.
-- **Stop current**: two-step confirmation ends the instance behind the current window (same as Task Manager End Task). Sessions are persisted — conversations resume after restarting DSH.
-- **Theme aware**: follows light/dark theme tokens; renders entirely in-page, never spawns console windows.
+- **Instance list**: port (clickable link), PID, status (current session / running / non-DSH service); refreshes every 4 seconds, manual refresh available.
+- **Stop instance**: sends an exit request to the target; disabled for legacy instances without this bundle, with the reason shown.
+- **Stop current instance**: requires two-step confirmation; the current window disconnects afterwards, sessions stay persisted and resume after restarting DSH.
+- **Styling**: colors follow theme tokens for light/dark; all logic runs in-page without spawning child processes.
 
 ## Install
 
