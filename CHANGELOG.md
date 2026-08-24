@@ -12,6 +12,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ### Changed
 
 - CI boot-check now asserts the request guards regressively (GET mutations → 405, foreign Origin / cross-site metadata / non-loopback Host → 403).
+- Child-instance launch resolves node via `process.execPath` and dsh bin via the current process's own entry script — no more machine-specific install paths (also fixes cold CI-like environments).
+- Unbundled dsh instances are detected by the injected `window.__DSH_BOOT__` manifest marker first; the brand string remains as a legacy fallback.
+
+### Performance
+
+- The 4s auto-refresh pauses while the browser tab is hidden and issues an immediate refresh on return — an open panel previously swept up to 50 local ports even in a background tab.
+
+### Removed
+
+- Dead `port` field from the internal start payload; the free-port scan in「启动新实例」now reuses the shared scanner instead of duplicating it.
 
 ## 0.5.0 — 2026-08-24
 
