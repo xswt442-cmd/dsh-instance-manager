@@ -49,11 +49,12 @@ jobs:
             echo "::warning::${pkg} is already on npm — nothing to publish"
           fi
 
+      # Auth = npm Trusted Publishing (OIDC), bound to this exact repo +
+      # workflow file in the package's npmjs.com settings. No token secret
+      # exists; --provenance carries the OIDC exchange (needs id-token: write).
       - name: publish to npm
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: GitHub release with CHANGELOG notes
         if: steps.published.outputs.already != 'yes'
