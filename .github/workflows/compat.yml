@@ -87,5 +87,15 @@ jobs:
           if ($legacy.Content -notmatch '"pid"') { Write-Error "legacy alias route not answered" }
           $client = Invoke-WebRequest -Uri "http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js" -UseBasicParsing -TimeoutSec 5
           if ($client.StatusCode -ne 200) { Write-Error "client bundle not served" }
+          # --- request-guard regression checks (see README 安全模型) ---
+          function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
+            & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @curlArgs $url
+          }
+          $b = "http://127.0.0.1:3129/dsh-instance-manager/api"
+          if ((ApiCode GET "$b`?action=start") -ne '405') { Write-Error 'guard regression: GET start must be 405' }
+          if ((ApiCode GET "$b`?action=stop&port=1") -ne '405') { Write-Error 'guard regression: GET stop must be 405' }
+          if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'guard regression: foreign Origin must be 403' }
+          if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
+          if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
