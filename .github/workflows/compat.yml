@@ -50,14 +50,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force "$env:DSH_HOME\profiles\web\node_modules" | Out-Null
           $src = (Get-Location).Path
-          New-Item -ItemType Junction -Path "$env:DSH_HOME\profiles\web\node_modules\dsh-easy-port-manager" -Target $src | Out-Null
+          New-Item -ItemType Junction -Path "$env:DSH_HOME\profiles\web\node_modules\dsh-instance-manager" -Target $src | Out-Null
           $pf = "$env:DSH_HOME\profiles\web\package.json"
           @'
           {
             "name": "dsh-profile-web",
             "private": true,
             "dependencies": {},
-            "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-easy-port-manager"] } }
+            "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-instance-manager"] } }
           }
           '@ | Set-Content $pf -Encoding UTF8
           # rewrite without BOM (JSON.parse rejects BOM)
@@ -81,9 +81,11 @@ jobs:
             if ($p.HasExited) { break }
           }
           if (-not $ready) { Write-Error "dsh web did not become ready" }
-          $api = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=list" -UseBasicParsing -TimeoutSec 5
+          $api = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" -UseBasicParsing -TimeoutSec 5
           if ($api.Content -notmatch '"items"') { Write-Error "manager api returned unexpected payload" }
-          $client = Invoke-WebRequest -Uri "http://127.0.0.1:3129/plugins/dsh-easy-port-manager/client.js" -UseBasicParsing -TimeoutSec 5
+          $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" -UseBasicParsing -TimeoutSec 5
+          if ($legacy.Content -notmatch '"pid"') { Write-Error "legacy alias route not answered" }
+          $client = Invoke-WebRequest -Uri "http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js" -UseBasicParsing -TimeoutSec 5
           if ($client.StatusCode -ne 200) { Write-Error "client bundle not served" }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"

@@ -1,8 +1,8 @@
-# dsh-easy-port-manager bundle patch: mount the host half as one loader row.
+# dsh-instance-manager bundle patch: mount the host half as one loader row.
 # The package manifest's `dsh.client` declaration makes client-modules serve
 # lib/client.js as the browser module for this row automatically (no separate
-# dsh.client row needed). The row loads dsh-easy-port-manager (host half) which
-# registers the /dsh-easy-port-manager/api JSON route on the webserver.
+# dsh.client row needed). The row loads dsh-instance-manager (host half) which
+# registers the /dsh-instance-manager/api JSON route on the webserver.
 - insert:
-    - id: easy-port-manager
-      name: dsh-easy-port-manager
+    - id: instance-manager
+      name: dsh-instance-manager

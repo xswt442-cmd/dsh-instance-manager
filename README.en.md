@@ -1,8 +1,8 @@
-# dsh-easy-port-manager
+# dsh-instance-manager
 
 > [中文](./README.md) | English
 
-A DSH plugin that adds a **dsh 管理** entry to the sidebar foot. It opens a floating panel listing every dsh web instance on local ports 3080–3129 (port / PID / status) and can stop a selected instance.
+A DSH plugin that adds a **dsh 管理** entry to the sidebar foot. It opens a floating panel listing every dsh web instance on local ports 3080–3129 (port / PID / status) and can stop a selected instance. (Formerly `dsh-easy-port-manager`; renamed in 0.5.0 — it manages instance lifecycles, ports are just the discovery mechanism.)
 
 Instance discovery happens over HTTP between local instances; stopping sends a request to the target, which exits through the harness's `appExit` shutdown while sessions are written to disk as usual. No child processes are spawned.
 
@@ -20,14 +20,16 @@ Instance discovery happens over HTTP between local instances; stopping sends a r
 ## Install
 
 ```powershell
-dsh plugin --profile web add "github:xswt442-cmd/dsh-easy-port-manager"
+dsh plugin --profile web add "github:xswt442-cmd/dsh-instance-manager"
 ```
 
 > Restart DSH Web afterwards.
+>
+> Upgrading from `dsh-easy-port-manager` ≤0.4.x: run `dsh plugin --profile web remove dsh-easy-port-manager` first, then install as above. Mixed fleets are fine — new panels discover and stop old instances, and old panels discover and stop new ones (the pre-rename route is kept as an alias).
 
 ## How it works
 
-The host half registers a JSON route `/dsh-easy-port-manager/api` on the webserver:
+The host half registers a JSON route `/dsh-instance-manager/api` on the webserver (the pre-rename `/dsh-easy-port-manager/api` path is kept as an identical-behavior alias):
 
 | Action | Method | Description |
 |---|---|---|
@@ -56,7 +58,7 @@ A malicious process already running locally can kill processes directly and is o
 ```
 package.json       npm metadata + dsh.bundle.patch + dsh.client (browser half registration)
 cordis.patch.yml   inserts this plugin's loader row into the profile
-lib/index.js       host (/dsh-easy-port-manager/api JSON route)
+lib/index.js       host (/dsh-instance-manager/api JSON route, legacy path kept as alias)
 lib/client.js      client (ModuleLoader classic-script bundle: sidebar action + floating panel)
 ```
 

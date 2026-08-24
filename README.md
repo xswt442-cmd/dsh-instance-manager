@@ -1,9 +1,11 @@
-# dsh-easy-port-manager
+# dsh-instance-manager
 
 > 中文 | [English](./README.en.md)
 
 在 DSH Web 的侧边栏底部添加「dsh 管理」入口。点击后打开浮动面板，列出本机
 3080–3129 端口上的全部 dsh web 实例（端口 / PID / 状态），并可停止选定实例。
+（原名 `dsh-easy-port-manager`，0.5.0 起更名 —— 管的是实例生命周期，端口只是
+发现手段。）
 
 实例发现通过 HTTP 在本机实例之间完成；停止操作向目标实例发送请求，由其调用
 harness 的 `appExit` 正常退出，会话照常写入磁盘。整个流程不启动任何子进程。
@@ -23,13 +25,15 @@ harness 的 `appExit` 正常退出，会话照常写入磁盘。整个流程不�
 
 ```powershell
 # 方式一：Git 依赖直装（推荐，无需本地 clone，重启 DSH 生效）
-dsh plugin --profile web add "github:xswt442-cmd/dsh-easy-port-manager"
+dsh plugin --profile web add "github:xswt442-cmd/dsh-instance-manager"
 
 # 方式二：本地 link（开发调试）
-dsh plugin --profile web add "E:\path\to\dsh-easy-port-manager"
+dsh plugin --profile web add "E:\path\to\dsh-instance-manager"
 ```
 
 > 装完**重启 DSH Web** 后生效。
+>
+> 从 `dsh-easy-port-manager` ≤0.4.x 升级：先 `dsh plugin --profile web remove dsh-easy-port-manager` 再按上面方式安装。新旧版本实例可混跑 —— 新面板能发现并停止旧实例，旧面板也能发现并停止新实例（旧路由以别名保留）。
 
 ## 卸载
 
@@ -39,7 +43,8 @@ dsh plugin --profile web remove dsh-easy-port-manager
 
 ## 工作原理
 
-主机端在 webserver 上注册一个 JSON 路由 `/dsh-easy-port-manager/api`：
+主机端在 webserver 上注册一个 JSON 路由 `/dsh-instance-manager/api`
+（旧路径 `/dsh-easy-port-manager/api` 以别名保留，行为完全一致）：
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
@@ -72,7 +77,7 @@ API 只面向本机面板，默认部署绑定回环地址。但浏览器允许�
 ```
 package.json       npm 元数据 + dsh.bundle.patch + dsh.client（浏览器半注册）
 cordis.patch.yml   向 profile 插入本插件行
-lib/index.js       host（/dsh-easy-port-manager/api JSON 路由）
+lib/index.js       host（/dsh-instance-manager/api JSON 路由，旧路径以别名保留）
 lib/client.js      client（ModuleLoader 经典脚本 bundle，侧边栏按钮 + 浮动面板）
 ```
 
