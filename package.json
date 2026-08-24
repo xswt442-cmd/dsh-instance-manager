@@ -20,7 +20,7 @@
   },
   "dshhub": {
     "schemaVersion": 1,
-    "displayName": "easy-port-manager",
+    "displayName": "instance-manager",
     "summary": "侧边栏面板统一查看并停止本机 3080–3129 端口的 dsh web 实例：端口、PID、运行时长、会话数，优雅退出（会话落盘），含启动新实例与一键全部结束。",
     "categories": ["dev", "Web UI"],
     "surfaces": ["host", "web"],
@@ -37,12 +37,16 @@
     "type": "git",
     "url": "git+https://github.com/xswt442-cmd/dsh-instance-manager.git"
   },
+  "homepage": "https://github.com/xswt442-cmd/dsh-instance-manager#readme",
+  "bugs": {
+    "url": "https://github.com/xswt442-cmd/dsh-instance-manager/issues"
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",
     "deepseek",
     "dsh-plugin",
-    "port-manager",
+    "instance-manager",
     "process-manager"
   ],
   "files": [
