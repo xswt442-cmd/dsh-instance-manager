@@ -41,16 +41,31 @@ dsh plugin --profile web remove dsh-easy-port-manager
 
 主机端在 webserver 上注册一个 JSON 路由 `/dsh-easy-port-manager/api`：
 
-| 动作 | 说明 |
-|---|---|
-| `action=list` | 并发探测 3080–3129：先问 `action=self`（挂载了本面板的实例会自报 pid / 启动时间 / 活跃会话数），再回退页面标记探测 |
-| `action=self` | 实例自报 `{ pid, port, startedAt, sessions }` |
-| `action=start` | 在第一个空闲端口启动新的 dsh web 实例（detached + windowsHide） |
-| `action=stop&port=` | 目标是自己 → 延迟 300ms 走 `appExit` 优雅退出；否则转发 `stop-self` 给目标 |
-| `action=stop-all` | 结束所有托管实例（远程转发 + 自身优雅退出） |
-| `action=stop-self` | 自身优雅退出 |
+| 动作 | 方法 | 说明 |
+|---|---|---|
+| `action=list` | GET | 并发探测 3080–3129：先问 `action=self`（挂载了本面板的实例会自报 pid / 启动时间 / 活跃会话数），再回退页面标记探测 |
+| `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions }` |
+| `action=start` | POST | 在第一个空闲端口启动新的 dsh web 实例（detached + windowsHide） |
+| `action=stop&port=` | POST | 目标是自己 → 延迟 300ms 走 `appExit` 优雅退出；否则转发 `stop-self` 给目标 |
+| `action=stop-all` | POST | 结束所有托管实例（远程转发 + 自身优雅退出） |
+| `action=stop-self` | POST | 自身优雅退出；额外容忍 GET，兼容 ≤0.4.1 旧实例的转发 |
 
 全程不启动 netstat/tasklist/powershell 等任何子进程，与挂载的 shell 执行器无关。
+
+## 安全模型
+
+API 只面向本机面板，默认部署绑定回环地址。但浏览器允许任意 https 页面向
+`http://127.0.0.1:<端口>` 发请求（回环地址被视为潜在可信来源，不受混合内容
+拦截），缺失 CORS 也只能阻止对方读取响应、拦不住请求发出。因此 0.4.2 起：
+
+- **变更类动作只接受 POST**（`start` / `stop` / `stop-all`）；`stop-self`
+  额外容忍 GET 以兼容旧实例间的转发。
+- **Fetch Metadata 校验**：请求携带 `sec-fetch-site: cross-site` 一律 403
+  （现代浏览器对每个请求都会附加该头，恶意页面的 img/form/fetch 全部命中）。
+- **Origin 同源校验**：携带 `Origin` 时必须是本实例的回环同源。
+- **Host 回环校验**：`Host` 必须是回环地址名，同时封死 DNS rebinding。
+
+不校验来源的本地恶意进程本来就能直接杀进程，不在威胁模型内。
 
 ## 结构
 

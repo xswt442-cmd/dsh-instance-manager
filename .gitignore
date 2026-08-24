@@ -1,5 +1,5 @@
 node_modules/
 *.log
 test-*
+test1.*
 .DS_Store
-test1.*test1.txt
