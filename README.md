@@ -34,7 +34,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
-| `list` | GET | 先读心跳注册表(10s 心跳 / 30s 有效)并复核,未覆盖端口再走 self 探测与页面标记 |
+| `list` | GET | 先读心跳注册表(10s 心跳 / 30s 有效)并复核(含超出扫描范围的心跳端口),未覆盖端口再走 self 探测与页面标记 |
 | `self` | GET | 自报 `{ pid, port, startedAt, sessions, rss, version }` |
 | `logs&port=&stream=out\|err` | GET | 尾读共享日志 `server-<port>.*.log`(≤64KB / 200 行) |
 | `start` | POST | 第一个空闲端口拉起新实例(detached 后台) |

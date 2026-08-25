@@ -15,7 +15,8 @@ import {
   registryDir,
   isValidRegistryEntry,
   firstNonNull,
-  tailFile
+  tailFile,
+  unionPorts
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -172,6 +173,16 @@ test('firstNonNull resolves null when everything misses or rejects', async () =>
     slowNull
   ]), null)
   assert.equal(await firstNonNull([]), null)
+})
+
+test('unionPorts merges the sweep range with out-of-range heartbeat ports', () => {
+  assert.deepEqual(unionPorts(3080, 3082), [3080, 3081, 3082])
+  assert.deepEqual(
+    unionPorts(3080, 3081, [4000, 3080, 70000, 0, -3, 1.5]),
+    [3080, 3081, 4000],
+    'dedupes, keeps only valid integer ports, sorts ascending'
+  )
+  assert.deepEqual(unionPorts(3080, 3080, [250, 80]), [80, 250, 3080])
 })
 
 // ---- tailFile ------------------------------------------------------------
