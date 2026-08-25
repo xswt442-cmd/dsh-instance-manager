@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-在 DSH Web 侧边栏添加管理面板,列出本机 3080–3129 端口上的全部 dsh web 实例(端口 / PID / 运行时长 / 会话数 / 内存),支持启动新实例与优雅停止任意实例。
+在 DSH Web 侧边栏添加管理面板,列出本机 3080–3129 端口上的全部 dsh web 实例(端口 / PID / 运行时长 / 会话数 / 内存),支持启动新实例与停止任意实例。
 
 ## 功能
 

@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-A management panel for the DSH Web sidebar that lists every dsh web instance on local ports 3080–3129 (port / PID / uptime / sessions / memory) and starts or gracefully stops any of them.
+A management panel for the DSH Web sidebar that lists every dsh web instance on local ports 3080–3129 (port / PID / uptime / sessions / memory) and starts or stops any of them.
 
 ## Features
 
