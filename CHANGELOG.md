@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ### Added
 
 - Agent tools: registers `instance_list` / `instance_start` / `instance_stop` / `instance_logs` with the harness `tools` service, so the in-session agent can inspect and drive the local fleet directly. `@deepseek-ai/dsh-tools` resolves from this package first, then from the running dsh checkout's own dependency tree; when neither exists the panel keeps working without tools. The stop tool refuses to kill the instance hosting the conversation.
+- Cross-instance session summaries: new `action=sessions&port=` self-reports (or forwards to) any managed instance's live sessions — scalar fields only (id, created-at, cwd, subagent origin, event count), newest-first, capped at 20 rows. Surfaced in the instance drawer and through a fifth agent tool, `instance_sessions`. Pre-0.7 peers degrade to an explicit "unavailable" instead of failing.
+- Fleet up/down push over SSE (`GET /dsh-instance-manager/events`): one lazy diff-ticker per process broadcasts managed-port joins and leaves to every subscriber; clients get a silent baseline frame on connect, then bottom-right toasts on change — even with the panel closed. The ticker stops itself when the last subscriber disconnects.
+
+### Fixed
+
+- The instance-stop argument validation now rejects non-integer ports (e.g. 1.5) at both the tool and forwarding layers.
 
 ## 0.6.2 — 2026-08-25
 

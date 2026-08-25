@@ -128,6 +128,15 @@ jobs:
           $start = Invoke-RestMethod -Method Post -Uri "$b`?action=start" -TimeoutSec 60
           if (-not $start.ok -or -not $start.pid) { Write-Error "start read-back failed: $($start | ConvertTo-Json -Compress)" }
           if ((ApiCode GET "http://127.0.0.1:$($start.port)/") -ne '200') { Write-Error "started instance unreachable on :$($start.port)" }
+          # --- sessions summary: self + forwarded to the fresh instance ---
+          $selfSess = Invoke-RestMethod -Uri "$b`?action=sessions" -TimeoutSec 15
+          if (-not $selfSess.ok) { Write-Error 'self sessions summary failed' }
+          $fwdSess = Invoke-RestMethod -Uri "$b`?action=sessions&port=$($start.port)" -TimeoutSec 20
+          if (-not $fwdSess.ok) { Write-Error "forwarded sessions failed: $($fwdSess | ConvertTo-Json -Compress)" }
+          # --- SSE endpoint answers as an event stream ---
+          $evReq = [System.Net.WebRequest]::Create("$b/events")
+          $evResp = $evReq.GetResponse()
+          try { if ($evResp.ContentType -notlike 'text/event-stream*') { Write-Error "unexpected SSE content type: $($evResp.ContentType)" } } finally { $evResp.Close() }
           $null = Invoke-RestMethod -Method Post -Uri "$b`?action=stop&port=$($start.port)" -TimeoutSec 30
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
@@ -173,6 +182,12 @@ jobs:
           new_port=$(printf '%s' "$start_json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).port||''))}catch(e){}})")
           [ -n "$new_port" ] || { echo "::error::start returned no usable port"; kill "$pid" 2>/dev/null || true; exit 1; }
           [ "$(code "http://127.0.0.1:$new_port/")" = "200" ] || { echo "::error::started instance unreachable on :$new_port"; kill "$pid" 2>/dev/null || true; exit 1; }
+          # --- sessions summary: self + forwarded to the fresh instance ---
+          curl -s --noproxy '*' --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          # --- SSE endpoint answers as an event stream ---
+          curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$b/events" || true
+          grep -qi 'text/event-stream' /tmp/dshim-ev-h.txt || { echo "::error::SSE endpoint missing"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
           kill "$pid" 2>/dev/null || true
           echo "compat check passed"
