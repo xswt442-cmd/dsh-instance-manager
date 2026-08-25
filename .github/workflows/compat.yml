@@ -134,7 +134,8 @@ jobs:
           $fwdSess = Invoke-RestMethod -Uri "$b`?action=sessions&port=$($start.port)" -TimeoutSec 20
           if (-not $fwdSess.ok) { Write-Error "forwarded sessions failed: $($fwdSess | ConvertTo-Json -Compress)" }
           # --- SSE endpoint answers as an event stream ---
-          $evReq = [System.Net.WebRequest]::Create("$b/events")
+          $evBase = $b -replace '/api$', ''
+          $evReq = [System.Net.WebRequest]::Create("$evBase/events")
           $evResp = $evReq.GetResponse()
           try { if ($evResp.ContentType -notlike 'text/event-stream*') { Write-Error "unexpected SSE content type: $($evResp.ContentType)" } } finally { $evResp.Close() }
           $null = Invoke-RestMethod -Method Post -Uri "$b`?action=stop&port=$($start.port)" -TimeoutSec 30
@@ -186,7 +187,8 @@ jobs:
           curl -s --noproxy '*' --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- SSE endpoint answers as an event stream ---
-          curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$b/events" || true
+          ev_root="${b%/api}"
+          curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true
           grep -qi 'text/event-stream' /tmp/dshim-ev-h.txt || { echo "::error::SSE endpoint missing"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
           kill "$pid" 2>/dev/null || true
