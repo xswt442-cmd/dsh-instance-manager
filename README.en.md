@@ -15,7 +15,9 @@ A management panel for the DSH Web sidebar: lists every dsh web instance on loca
 - **Instance details**: click a row to expand a drawer — start time, memory sparkline, stdout/stderr log tails (last 200 lines)
 - **Start / stop**: one-click new instance; graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice
 - **zh / EN toggle**: header button switches languages instantly; preference persists in localStorage
-- **Agent tools**: registers `instance_list / instance_start / instance_stop / instance_logs` with the in-session model, so agents can inspect and drive instances (the stop tool refuses to kill the current instance)
+- **Agent tools**: registers `instance_list / instance_start / instance_stop / instance_logs / instance_sessions` with the in-session model, so agents can inspect and drive instances (the stop tool refuses to kill the current instance)
+- **Up/down toasts**: managed instances joining or leaving pop an instant toast bottom-right via SSE — even while the panel is closed
+- **Session summaries**: inspect any managed instance's live sessions from the drawer (time / cwd / subagent / activity)
 
 Apart from launching new instances, no child processes are spawned.
 
@@ -38,6 +40,8 @@ The host half registers the JSON route `/dsh-instance-manager/api` (the pre-rena
 | `list` | GET | Reads the heartbeat registry first (10 s cadence / 30 s freshness) and re-verifies claims, including heartbeat-known ports outside the sweep range; uncovered ports fall back to self-probing and page markers |
 | `self` | GET | Reports `{ pid, port, startedAt, sessions, rss, version }` |
 | `logs&port=&stream=out\|err` | GET | Tails the shared launcher log `server-<port>.*.log` (≤64KB / 200 lines) |
+| `sessions&port=` | GET | Live-session summary of the target instance (scalar fields only, newest 20); omit port for self |
+| `GET /dsh-instance-manager/events` | GET | SSE fleet up/down push (baseline frame + diff frames) |
 | `start` | POST | Launches a new instance on the first free port (detached background) and holds the reply until it answers `self`, returning `{ ok, port, pid }`; a lost port race retries once on the next free port |
 | `stop&port=` | POST | Self → `appExit`; otherwise forwards `stop-self` to the target |
 | `stop-all` | POST | Forwards stops in parallel, then exits itself |

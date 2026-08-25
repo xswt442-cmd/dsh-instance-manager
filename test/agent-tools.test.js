@@ -13,7 +13,7 @@ import { buildAgentTools } from '../lib/agent-tools.js'
 const identity = (d) => d
 
 const makeApi = (over = {}) => {
-  const calls = { stop: [], logs: [] }
+  const calls = { stop: [], logs: [], sessions: [] }
   const api = {
     listInstances: async () => ({
       items: [
@@ -26,18 +26,27 @@ const makeApi = (over = {}) => {
     }),
     start: async () => ({ ok: true, port: 3099, pid: 222 }),
     stop: async (port) => { calls.stop.push(port); return { ok: true, note: 'stopped :' + port } },
-    logs: (port, stream) => { calls.logs.push([port, stream]); return { exists: true, truncated: false, lines: ['a', 'b'] } }
+    logs: (port, stream) => { calls.logs.push([port, stream]); return { exists: true, truncated: false, lines: ['a', 'b'] } },
+    sessions: async (port) => {
+      calls.sessions.push(port)
+      return port === 4000
+        ? { ok: false, code: 'sessions_unavailable', error: 'target does not expose session summaries' }
+        : { ok: true, port, total: 2, sessions: [
+            { id: 'abcdef1234567890', createdAt: 200, cwd: '/work/alpha', events: 12 },
+            { id: 'ffff000011112222', createdAt: 100, subagent: true, events: 3 }
+          ] }
+    }
   }
   return { api: Object.assign(api, over), calls }
 }
 
 const byName = (defs) => Object.fromEntries(defs.map((d) => [d.name, d]))
 
-test('buildAgentTools exposes the four instance tools with registry-ready shapes', () => {
+test('buildAgentTools exposes the five instance tools with registry-ready shapes', () => {
   const { api } = makeApi()
   const tools = byName(buildAgentTools(identity, api))
   assert.deepEqual(Object.keys(tools).sort(), [
-    'instance_list', 'instance_logs', 'instance_start', 'instance_stop'
+    'instance_list', 'instance_logs', 'instance_sessions', 'instance_start', 'instance_stop'
   ])
   for (const def of Object.values(tools)) {
     assert.equal(typeof def.description, 'string')
@@ -124,4 +133,45 @@ test('instance_logs renders the missing-file hint', async () => {
   const v = await logDef.execute({ port: 3000 })
   assert.equal(v.exists, false)
   assert.match(logDef.output.render({ port: 3000 }, v)[0].text, /no log file for :3000/)
+})
+
+// ---- instance_sessions ----------------------------------------------------
+
+test('instance_sessions forwards to the api and renders a compact list', async () => {
+  const { api, calls } = makeApi()
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const v = await def.execute({ port: 3080 })
+  assert.deepEqual(calls.sessions, [3080])
+  assert.equal(v.ok, true)
+  assert.equal(v.total, 2)
+  assert.equal(v.sessions[0].id, 'abcdef1234567890')
+
+  const text0 = def.output.render({}, v)[0].text
+  assert.match(text0, /:3080 — 2 live session/)
+  assert.match(text0, /abcdef12 · alpha · 12 ev/, 'short id + cwd basename + event count')
+  assert.match(text0, /subagent/)
+
+  // >8 rows collapse into a "+N more" tail.
+  const many = Object.assign({}, v, {
+    total: 10,
+    sessions: Array.from({ length: 10 }, (_, i) => ({ id: 'id' + i, createdAt: i }))
+  })
+  assert.match(def.output.render({}, many)[0].text, /\+2 more/)
+})
+
+test('instance_sessions surfaces unavailability and rejects bad ports', async () => {
+  const { api, calls } = makeApi()
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const legacy = await def.execute({ port: 4000 })
+  assert.equal(legacy.ok, false)
+  assert.equal(legacy.code, 'sessions_unavailable')
+  assert.match(def.output.render({}, legacy)[0].text, /failed/)
+
+  for (const bad of [0, -1, 70000, 2.5]) {
+    const r = await def.execute({ port: bad })
+    assert.equal(r.code, 'bad_port', 'port ' + bad + ' must be rejected')
+  }
+  assert.deepEqual(calls.sessions, [4000], 'only the valid port reaches the api')
 })

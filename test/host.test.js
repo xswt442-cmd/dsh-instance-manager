@@ -16,7 +16,9 @@ import {
   isValidRegistryEntry,
   firstNonNull,
   tailFile,
-  unionPorts
+  unionPorts,
+  summarizeSessions,
+  diffManagedPorts
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -183,6 +185,44 @@ test('unionPorts merges the sweep range with out-of-range heartbeat ports', () =
     'dedupes, keeps only valid integer ports, sorts ascending'
   )
   assert.deepEqual(unionPorts(3080, 3080, [250, 80]), [80, 250, 3080])
+})
+
+// ---- session summaries ----------------------------------------------------
+
+test('summarizeSessions extracts scalar fields, sorts newest-first, caps', () => {
+  const sessions = [
+    { id: 'aaa', header: { createdAt: 100, cwd: '/work/alpha', origin: 'subagent' }, seq: 7 },
+    { id: 'bbb', header: { createdAt: 200 } },
+    { id: 'ccc', header: { createdAt: 150, cwd: '' }, seq: 0 }
+  ]
+  const rows = summarizeSessions(sessions)
+  assert.deepEqual(rows.map((r) => r.id), ['bbb', 'ccc', 'aaa'], 'newest first')
+  assert.deepEqual(rows[1], { id: 'ccc', createdAt: 150, events: 0 }, 'empty cwd pruned, zero events kept')
+  assert.equal(rows[2].cwd, '/work/alpha')
+  assert.equal(rows[2].subagent, true)
+  // Non-summaries are skipped, never thrown over.
+  assert.deepEqual(summarizeSessions([null, {}, { id: 'x' }, 'junk', sessions[0]]).map((r) => r.id), ['aaa'])
+  assert.equal(summarizeSessions(undefined).length, 0)
+})
+
+test('summarizeSessions caps at N newest rows', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    id: 's' + i, header: { createdAt: i * 10 }, seq: i
+  }))
+  const rows = summarizeSessions(many, 20)
+  assert.equal(rows.length, 20)
+  assert.equal(rows[0].id, 's29', 'cap keeps the NEWEST rows')
+})
+
+// ---- fleet up/down diff ---------------------------------------------------
+
+test('diffManagedPorts reports joins and leaves between ticks', () => {
+  assert.deepEqual(
+    diffManagedPorts(new Set([3080, 3081]), new Set([3081, 3082])),
+    { added: [3082], removed: [3080] }
+  )
+  assert.deepEqual(diffManagedPorts(new Set(), new Set([4000])), { added: [4000], removed: [] })
+  assert.deepEqual(diffManagedPorts(new Set([3080]), new Set([3080])), { added: [], removed: [] })
 })
 
 // ---- tailFile ------------------------------------------------------------
