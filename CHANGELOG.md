@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Added
+
+- The instance start time in the detail drawer now shows the viewer's IANA timezone beside the local time (e.g. `2026/8/25 17:23:45 (Asia/Shanghai)`). Rendered entirely client-side from the epoch — nothing about the timezone is reported or stored anywhere.
+
+### Fixed
+
+- Stopping the current instance (or all instances) now swaps the panel to a farewell screen and halts polling, instead of spinning into guaranteed-failing requests that surfaced a network-error banner. `window.close()` is attempted as a courtesy; since most browsers only honor it for script-opened windows, the visible "you can close this tab" message is the real fallback.
+
 ## 0.6.1 — 2026-08-25
 
 ### Added
