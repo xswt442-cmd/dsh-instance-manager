@@ -18,7 +18,8 @@ import {
   tailFile,
   unionPorts,
   summarizeSessions,
-  diffManagedPorts
+  diffManagedPorts,
+  parsePortRange
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -223,6 +224,20 @@ test('diffManagedPorts reports joins and leaves between ticks', () => {
   )
   assert.deepEqual(diffManagedPorts(new Set(), new Set([4000])), { added: [4000], removed: [] })
   assert.deepEqual(diffManagedPorts(new Set([3080]), new Set([3080])), { added: [], removed: [] })
+})
+
+test('parsePortRange honors the env override and falls back silently', () => {
+  assert.deepEqual(parsePortRange(undefined), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange(''), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('junk'), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('4000-4010'), { min: 4000, max: 4010 })
+  assert.deepEqual(parsePortRange(' 4000 - 4010 '), { min: 4000, max: 4010 }, 'whitespace tolerated')
+  assert.deepEqual(parsePortRange('80-80'), { min: 80, max: 80 }, 'single-port band allowed')
+  // invalid shapes and bounds fall back
+  assert.deepEqual(parsePortRange('4000'), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('5000-4000'), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('0-100'), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('1-70000'), { min: 3080, max: 3129 })
 })
 
 // ---- tailFile ------------------------------------------------------------

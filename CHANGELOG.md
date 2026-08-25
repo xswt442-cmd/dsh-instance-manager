@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Added
+
+- **Crash black-box**: every mounted instance registers process-level `uncaughtException` / `unhandledRejection` hooks that append timestamped stacks (with pid+port) to `$DSH_HOME/launcher/logs/dshim-crash.log` BEFORE preserving node's exit-1 semantics — the next mystery death leaves a readable stack instead of silence. Hooks are released when the plugin disposes.
+- `DSHIM_PORT_RANGE="min-max"` overrides the sweep/start port band (default 3080–3129). Research note: nothing in the dsh runtime hard-codes the band — the webserver takes its port from composition config and even accepts 0 (OS-assigned) — so discovery stays heartbeat-driven and port-agnostic regardless of any range.
+
+### Fixed
+
+- **Crash hardening**: SSE subscriptions now attach `error` listeners to both streams — an abrupt client disconnect used to surface as an unhandled async `'error'` event, which node treats as fatal (prime suspect for「dsh 又莫名其妙崩了」with zero stderr). `broadcastFleet` also skips destroyed/writable-ended sockets.
+- 「启动新实例」no longer mis-reports slow FIRST sibling-instance boots as failures. The confirm window is now 25 s (was 10 s): one-time first-boot work in profile plugins (session-log backfills scanning every stored conversation) routinely runs past ten seconds — this was exactly the「第一次开第二个实例必失败、再试一次就好」trap, since the retry finds the backfill already done and boots instantly.
+- Panel-launched children spawn with `--no-open`: dsh's auto-opened browser tab used to land on a half-booted instance and read as a crash.
+- A child that exits during the confirm window leaves an exit-code breadcrumb in its launcher log (the child's own stderr is usually empty).
+
 ## 0.7.0 — 2026-08-25
 
 ### Added

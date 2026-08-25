@@ -47,6 +47,14 @@ The host half registers the JSON route `/dsh-instance-manager/api` (the pre-rena
 | `stop-all` | POST | Forwards stops in parallel, then exits itself |
 | `stop-self` | POST | Graceful self-shutdown (GET tolerated for ≤0.4.1 peer forwarding) |
 
+## Port band and adaptability
+
+Sweep/start default to **3080–3129** (matching dsh's documented convention). Research note: the band is a convention, not a runtime contract — the dsh webserver takes its port from composition config and even supports `0` (OS-assigned); nothing in the runtime hard-codes it. Therefore:
+
+- `DSHIM_PORT_RANGE="4000-4010"` overrides the sweep/start band wholesale
+- **Discovery never depended on the band**: heartbeat entries validate 1–65535, so instances hand-started outside the range are still listed, stopped, and inspectable
+- Panel-launched children spawn with `--no-open`; the start-confirm window is up to 25 s, so slow first boots (session-log backfills) are no longer mis-reported as failures, and a child that dies in-window leaves an exit-code breadcrumb in its launcher log
+
 ## Security model
 
 The API serves the local panel only. Loopback is exempt from mixed-content blocking and missing CORS only hides responses, so every action passes a shared guard:
