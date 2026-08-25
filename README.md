@@ -11,6 +11,7 @@
 ## 功能
 
 - **实例列表**:端口(可点击直达)、PID、运行时长、活跃会话数、内存占用;状态标注(当前会话 / 运行中 / 非 dsh 服务);4 秒自动刷新,标签页隐藏时暂停
+- **版本标注**:每个托管实例自报插件版本;与当前实例不同的行标「版本差异」——混跑窗口期一眼可见,全舰队一致即可移除旧版兼容路由
 - **启动新实例**:在第一个空闲端口以 detached 后台进程拉起新的 dsh web 实例,日志写入 `~\.dsh\launcher\logs\`
 - **停止实例**:向目标发送退出请求,由其调用 harness `appExit` 正常退出,会话照常落盘;未挂载本面板的旧实例禁用该项并提示原因
 - **停止当前实例 / 全部结束**:均需两步确认;结束后界面断开,重启 DSH 后会话自动恢复
@@ -50,8 +51,8 @@ dsh plugin --profile web remove dsh-instance-manager
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
-| `action=list` | GET | 并发探测 3080–3129:先请求 `action=self` 获取自报信息,其余回退页面标记探测 |
-| `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions, rss }` |
+| `action=list` | GET | 优先读取心跳注册表(`~\.dsh\run\instances\<port>.json`,10s 心跳 / 30s 有效)并对自报复核;未覆盖端口再走 self 探测与页面标记 |
+| `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions, rss, version }` |
 | `action=start` | POST | 在第一个空闲端口启动新的 dsh web 实例(detached + windowsHide) |
 | `action=stop&port=` | POST | 目标是自己 → 延迟后走 `appExit` 优雅退出;否则向目标转发 `stop-self` |
 | `action=stop-all` | POST | 并行转发停止所有托管实例,最后自身优雅退出 |
@@ -77,6 +78,8 @@ package.json       npm 元数据 + dsh.bundle.patch + dsh.client 声明
 cordis.patch.yml   向 profile 插入本插件 loader 行
 lib/index.js       host:注册 /dsh-instance-manager/api JSON 路由
 lib/client.js      client:侧边栏入口 + 浮动面板(ModuleLoader bundle)
+lib/shared.js      host 纯函数(请求守卫 / bin 解析 / 注册表校验)
+test/              node:test 单元测试(npm test)
 CHANGELOG.md       变更记录
 ```
 

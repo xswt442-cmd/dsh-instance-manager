@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Added
+
+- Instance self-report now carries the plugin version (`version`), and the panel flags rows whose version differs from the serving instance (「版本差异」 badge) — mixed-fleet windows become visible, and a clean fleet is the objective signal for retiring the legacy alias route.
+- File-based instance registry: every managed instance heartbeats `~\.dsh\run\instances\<port>.json` (10 s cadence, entries trusted for 30 s); `action=list` verifies fresh claims with a cheap `action=self` re-check and sweeps only the ports no heartbeat covers. The 50-port blind probe becomes the fallback path instead of the norm; graceful exits remove the file via the plugin disposer.
+- node:test unit suite (`npm test`) covering the request guards, loopback parsing, dsh-bin resolution, registry-entry validation and self-probe racing; wired into the compat static job.
+
+### Changed
+
+- Cross-platform: the dsh-launcher profile-path fallback is built with `path.join` instead of a Windows-only backslash literal.
+- Self-report discovery fans the current and pre-rename routes out concurrently instead of paying two serial timeouts per live port that answers neither.
+- CI: boot-check now runs on windows-latest AND ubuntu-latest (symlink + bash variant) and no longer tolerates failures (`continue-on-error` removed); publish sanity-check asserts `lib/shared.js VERSION` matches the release tag.
+
 ## 0.6.0 — 2026-08-24
 
 ### Added

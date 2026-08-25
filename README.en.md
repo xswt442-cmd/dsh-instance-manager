@@ -11,6 +11,7 @@ A management panel for the DSH Web sidebar that lists every dsh web instance on 
 ## Features
 
 - **Instance list**: port (clickable), PID, uptime, active session count, memory usage; status badge (current session / running / non-DSH service); auto-refresh every 4 seconds, paused while the tab is hidden
+- **Version badges**: every managed instance reports its plugin version; rows running a different version than this panel get a "version skew" flag — mixed-fleet windows become visible, and a clean fleet is the signal to retire the legacy alias route
 - **Start new instance**: launches a dsh web instance on the first free port as a detached background process; logs under `~\.dsh\launcher\logs\`
 - **Stop instance**: sends an exit request to the target, which shuts down through the harness `appExit` path while sessions persist as usual; disabled for instances without this bundle, with the reason shown
 - **Stop current instance / stop all**: both require a two-step confirmation; the UI disconnects afterwards and sessions resume on the next DSH start
@@ -50,8 +51,8 @@ The host half registers a JSON route `/dsh-instance-manager/api` on the webserve
 
 | Action | Method | Description |
 |---|---|---|
-| `action=list` | GET | Probes 3080–3129 concurrently: requests `action=self` for self-reporting instances, falls back to page-marker probing |
-| `action=self` | GET | Instance reports `{ pid, port, startedAt, sessions, rss }` |
+| `action=list` | GET | Reads the heartbeat registry first (`~\.dsh\run\instances\<port>.json`, 10 s cadence / 30 s freshness) and re-verifies each claim via `action=self`; only uncovered ports fall back to self-probing and page-marker detection |
+| `action=self` | GET | Instance reports `{ pid, port, startedAt, sessions, rss, version }` |
 | `action=start` | POST | Starts a new dsh web instance on the first free port (detached + windowsHide) |
 | `action=stop&port=` | POST | Self target → delayed `appExit` shutdown; otherwise forwards `stop-self` to the target |
 | `action=stop-all` | POST | Forwards stops to all managed instances in parallel, then exits itself |
@@ -77,6 +78,8 @@ package.json       npm metadata + dsh.bundle.patch + dsh.client declaration
 cordis.patch.yml   inserts this plugin's loader row into the profile
 lib/index.js       host: registers the /dsh-instance-manager/api JSON route
 lib/client.js      client: sidebar entry + floating panel (ModuleLoader bundle)
+lib/shared.js      host pure helpers (request guards / bin resolution / registry validation)
+test/              node:test unit suite (npm test)
 CHANGELOG.md       changelog
 ```
 
