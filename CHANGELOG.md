@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Added
+
+- Agent tools: registers `instance_list` / `instance_start` / `instance_stop` / `instance_logs` with the harness `tools` service, so the in-session agent can inspect and drive the local fleet directly. `@deepseek-ai/dsh-tools` resolves from this package first, then from the running dsh checkout's own dependency tree; when neither exists the panel keeps working without tools. The stop tool refuses to kill the instance hosting the conversation.
+
 ## 0.6.2 — 2026-08-25
 
 ### Added
