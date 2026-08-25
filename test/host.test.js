@@ -14,7 +14,8 @@ import {
   resolveDshBin,
   registryDir,
   isValidRegistryEntry,
-  firstNonNull
+  firstNonNull,
+  tailFile
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -171,4 +172,39 @@ test('firstNonNull resolves null when everything misses or rejects', async () =>
     slowNull
   ]), null)
   assert.equal(await firstNonNull([]), null)
+})
+
+// ---- tailFile ------------------------------------------------------------
+
+test('tailFile returns whole lines only, bounded by maxLines and maxBytes', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(path.join(tmpdir(), 'dshim-tail-'))
+  try {
+    // 30 numbered lines -> last 10 with default-ish cap
+    writeFileSync(path.join(dir, 'a.log'), Array.from({ length: 30 }, (_, i) => 'line-' + (i + 1)).join('\n') + '\n')
+    const t1 = tailFile(path.join(dir, 'a.log'), 65536, 10)
+    assert.equal(t1.exists, true)
+    assert.equal(t1.lines.length, 10)
+    assert.equal(t1.lines[0], 'line-21')
+    assert.equal(t1.lines[9], 'line-30')
+    assert.equal(t1.truncated, true)
+
+    // small file: everything fits, no truncation
+    writeFileSync(path.join(dir, 'b.log'), 'hello\nworld\n')
+    const t2 = tailFile(path.join(dir, 'b.log'), 65536, 200)
+    assert.deepEqual(t2, { exists: true, truncated: false, lines: ['hello', 'world'] })
+
+    // byte bound smaller than the file -> cut leading fragment is dropped
+    writeFileSync(path.join(dir, 'c.log'), 'START-cut-line\nwhole-one\nwhole-two\n')
+    const t3 = tailFile(path.join(dir, 'c.log'), 24, 200)
+    assert.equal(t3.exists, true)
+    assert.deepEqual(t3.lines, ['whole-one', 'whole-two'])
+
+    // missing file -> exists:false instead of a throw
+    const t4 = tailFile(path.join(dir, 'nope.log'))
+    assert.deepEqual(t4, { exists: false, truncated: false, lines: [] })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

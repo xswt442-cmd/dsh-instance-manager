@@ -12,6 +12,8 @@
 
 - **实例列表**:端口(可点击直达)、PID、运行时长、活跃会话数、内存占用;状态标注(当前会话 / 运行中 / 非 dsh 服务);4 秒自动刷新,标签页隐藏时暂停
 - **版本标注**:每个托管实例自报插件版本;与当前实例不同的行标「版本差异」——混跑窗口期一眼可见,全舰队一致即可移除旧版兼容路由
+- **中英切换**:面板头部「EN / 中」即点即换,偏好存 localStorage,首次打开跟随浏览器语言
+- **实例详情**:点击任意行展开抽屉——pid、启动时间、版本、内存走势(面板轮询采样,近 60 个点)、stdout/stderr 日志尾随(最近 200 行)
 - **启动新实例**:在第一个空闲端口以 detached 后台进程拉起新的 dsh web 实例,日志写入 `~\.dsh\launcher\logs\`
 - **停止实例**:向目标发送退出请求,由其调用 harness `appExit` 正常退出,会话照常落盘;未挂载本面板的旧实例禁用该项并提示原因
 - **停止当前实例 / 全部结束**:均需两步确认;结束后界面断开,重启 DSH 后会话自动恢复
@@ -53,6 +55,7 @@ dsh plugin --profile web remove dsh-instance-manager
 |---|---|---|
 | `action=list` | GET | 优先读取心跳注册表(`~\.dsh\run\instances\<port>.json`,10s 心跳 / 30s 有效)并对自报复核;未覆盖端口再走 self 探测与页面标记 |
 | `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions, rss, version }` |
+| `action=logs&port=&stream=out\|err` | GET | 尾读该端口的启动日志(`~\.dsh\launcher\logs\server-<port>.*.log`,最多 64KB / 200 行);日志目录全实例共享,无需转发 |
 | `action=start` | POST | 在第一个空闲端口启动新的 dsh web 实例(detached + windowsHide) |
 | `action=stop&port=` | POST | 目标是自己 → 延迟后走 `appExit` 优雅退出;否则向目标转发 `stop-self` |
 | `action=stop-all` | POST | 并行转发停止所有托管实例,最后自身优雅退出 |
