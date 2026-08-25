@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ### Fixed
 
 - Discovery now also lists instances whose heartbeat sits OUTSIDE the fixed 3080–3129 sweep (e.g. one hand-started with `--port 4000`) — registry-known ports join the sweep instead of being dropped.
+- 「启动新实例」now holds the request until the fresh child answers `action=self` and returns its `pid`; a child that dies immediately (lost the port race) retries once on the next free port instead of failing silently, and a slow-booting child is reported as `start_unconfirmed` rather than double-spawned. Covered by a new boot-check regression on both OSes.
 - Stopping the current instance (or all instances) now swaps the panel to a farewell screen and halts polling, instead of spinning into guaranteed-failing requests that surfaced a network-error banner. The farewell tells the user they can close the tab; script-driven window closing was deliberately left out since browsers ignore it anyway.
 
 ## 0.6.1 — 2026-08-25

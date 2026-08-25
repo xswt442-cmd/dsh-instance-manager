@@ -37,7 +37,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 | `list` | GET | 先读心跳注册表(10s 心跳 / 30s 有效)并复核(含超出扫描范围的心跳端口),未覆盖端口再走 self 探测与页面标记 |
 | `self` | GET | 自报 `{ pid, port, startedAt, sessions, rss, version }` |
 | `logs&port=&stream=out\|err` | GET | 尾读共享日志 `server-<port>.*.log`(≤64KB / 200 行) |
-| `start` | POST | 第一个空闲端口拉起新实例(detached 后台) |
+| `start` | POST | 第一个空闲端口拉起新实例(detached 后台),等待其自报就绪后返回 `{ ok, port, pid }`;端口竞态失败自动换口重试一次 |
 | `stop&port=` | POST | 自己 → `appExit` 优雅退出;否则向目标转发 `stop-self` |
 | `stop-all` | POST | 并行转发停止全部托管实例,最后自身退出 |
 | `stop-self` | POST | 自身优雅退出(GET 容忍,兼容 ≤0.4.1 转发) |
