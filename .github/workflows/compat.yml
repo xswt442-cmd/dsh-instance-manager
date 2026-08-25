@@ -124,6 +124,11 @@ jobs:
           if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'guard regression: foreign Origin must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
+          # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
+          $start = Invoke-RestMethod -Method Post -Uri "$b`?action=start" -TimeoutSec 60
+          if (-not $start.ok -or -not $start.pid) { Write-Error "start read-back failed: $($start | ConvertTo-Json -Compress)" }
+          if ((ApiCode GET "http://127.0.0.1:$($start.port)/") -ne '200') { Write-Error "started instance unreachable on :$($start.port)" }
+          $null = Invoke-RestMethod -Method Post -Uri "$b`?action=stop&port=$($start.port)" -TimeoutSec 30
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
       - name: boot dsh web on 3129 (linux)
@@ -162,5 +167,12 @@ jobs:
           [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::guard regression: foreign Origin must be 403"; exit 1; }
           [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
           [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
+          # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
+          start_json=$(curl -s --noproxy '*' -X POST "$b?action=start" --max-time 60)
+          echo "$start_json" | grep -q '"pid"' || { echo "::error::start read-back failed: $start_json"; kill "$pid" 2>/dev/null || true; exit 1; }
+          new_port=$(printf '%s' "$start_json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).port||''))}catch(e){}})")
+          [ -n "$new_port" ] || { echo "::error::start returned no usable port"; kill "$pid" 2>/dev/null || true; exit 1; }
+          [ "$(code "http://127.0.0.1:$new_port/")" = "200" ] || { echo "::error::started instance unreachable on :$new_port"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
           kill "$pid" 2>/dev/null || true
           echo "compat check passed"

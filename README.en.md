@@ -34,10 +34,10 @@ The host half registers the JSON route `/dsh-instance-manager/api` (the pre-rena
 
 | Action | Method | Description |
 |---|---|---|
-| `list` | GET | Reads the heartbeat registry first (10 s cadence / 30 s freshness) and re-verifies claims; uncovered ports fall back to self-probing and page markers |
+| `list` | GET | Reads the heartbeat registry first (10 s cadence / 30 s freshness) and re-verifies claims, including heartbeat-known ports outside the sweep range; uncovered ports fall back to self-probing and page markers |
 | `self` | GET | Reports `{ pid, port, startedAt, sessions, rss, version }` |
 | `logs&port=&stream=out\|err` | GET | Tails the shared launcher log `server-<port>.*.log` (≤64KB / 200 lines) |
-| `start` | POST | Launches a new instance on the first free port (detached background) |
+| `start` | POST | Launches a new instance on the first free port (detached background) and holds the reply until it answers `self`, returning `{ ok, port, pid }`; a lost port race retries once on the next free port |
 | `stop&port=` | POST | Self → `appExit`; otherwise forwards `stop-self` to the target |
 | `stop-all` | POST | Forwards stops in parallel, then exits itself |
 | `stop-self` | POST | Graceful self-shutdown (GET tolerated for ≤0.4.1 peer forwarding) |
