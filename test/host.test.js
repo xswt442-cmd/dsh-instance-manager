@@ -76,6 +76,7 @@ test('guard rejects cross-site fetch metadata with 403', () => {
   assert.equal(guard(reqOf({ 'sec-fetch-site': 'cross-site' })), false)
   assert.equal(guard(reqOf({ 'sec-fetch-site': 'same-site' })), false)
   assert.deepEqual(rejections.map((r) => r.code), [403, 403])
+  assert.equal(rejections[0].obj.code, 'cross_site')
 })
 
 test('guard rejects foreign Origin with 403 (including right host, wrong port)', () => {
@@ -83,6 +84,7 @@ test('guard rejects foreign Origin with 403 (including right host, wrong port)',
   assert.equal(guard(reqOf({ origin: 'https://evil.example' })), false)
   assert.equal(guard(reqOf({ origin: 'http://127.0.0.1:3999' })), false)
   assert.equal(rejections.every((r) => r.code === 403), true)
+  assert.equal(rejections.every((r) => r.obj.code === 'bad_origin'), true)
 })
 
 test('guard rejects non-loopback Host with 403 (DNS rebinding closed)', () => {
@@ -90,6 +92,7 @@ test('guard rejects non-loopback Host with 403 (DNS rebinding closed)', () => {
   assert.equal(guard(reqOf({ host: 'rebound.example' })), false)
   assert.equal(guard(reqOf({ host: 'rebound.example:3080' })), false)
   assert.equal(rejections.every((r) => r.code === 403), true)
+  assert.equal(rejections.every((r) => r.obj.code === 'bad_host'), true)
 })
 
 test('guard Origin check follows the live currentPort()', () => {
