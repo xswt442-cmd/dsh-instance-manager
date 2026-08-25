@@ -1,65 +1,83 @@
 # dsh-instance-manager
 
-> [中文](./README.md) | English
+[中文](./README.md) | English
 
-A DSH plugin that adds a **dsh 管理** entry to the sidebar foot. It opens a floating panel listing every dsh web instance on local ports 3080–3129 (port / PID / status) and can stop a selected instance. (Formerly `dsh-easy-port-manager`; renamed in 0.5.0 — it manages instance lifecycles, ports are just the discovery mechanism.)
-
-Instance discovery happens over HTTP between local instances; stopping sends a request to the target, which exits through the harness's `appExit` shutdown while sessions are written to disk as usual. No child processes are spawned.
-
+[![npm](https://img.shields.io/npm/v/dsh-instance-manager)](https://www.npmjs.com/package/dsh-instance-manager)
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
+A management panel for the DSH Web sidebar that lists every dsh web instance on local ports 3080–3129 (port / PID / uptime / sessions / memory) and starts or gracefully stops any of them.
 
 ## Features
 
-- **Instance list**: port (clickable link), PID, uptime, active session count, status (current session / running / non-DSH service); refreshes every 4 seconds, manual refresh available.
-- **Start new instance**: launches a fresh dsh web instance on the first free port (hidden background process, logs under `~\.dsh\launcher\logs\`).
-- **Stop instance**: sends an exit request to the target; disabled for legacy instances without this bundle, with the reason shown.
-- **Stop all**: ends every managed instance (including the one this panel lives in) behind a two-step confirmation.
-- **Stop current instance**: requires two-step confirmation; the current window disconnects afterwards, sessions stay persisted and resume after restarting DSH.
-- **Styling**: colors follow theme tokens for light/dark; apart from launching new instances, no child processes are spawned.
+- **Instance list**: port (clickable), PID, uptime, active session count, memory usage; status badge (current session / running / non-DSH service); auto-refresh every 4 seconds, paused while the tab is hidden
+- **Start new instance**: launches a dsh web instance on the first free port as a detached background process; logs under `~\.dsh\launcher\logs\`
+- **Stop instance**: sends an exit request to the target, which shuts down through the harness `appExit` path while sessions persist as usual; disabled for instances without this bundle, with the reason shown
+- **Stop current instance / stop all**: both require a two-step confirmation; the UI disconnects afterwards and sessions resume on the next DSH start
+
+Apart from launching new instances, no child processes are spawned.
 
 ## Install
 
 ```powershell
-dsh plugin --profile web add "github:xswt442-cmd/dsh-instance-manager"
+# npm package (recommended)
+dsh plugin --profile web add dsh-instance-manager
+
+# or install from the Git repository
+dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 ```
 
-> Restart DSH Web afterwards.
->
-> Upgrading from `dsh-easy-port-manager` ≤0.4.x: run `dsh plugin --profile web remove dsh-easy-port-manager` first, then install as above. Mixed fleets are fine — new panels discover and stop old instances, and old panels discover and stop new ones (the pre-rename route is kept as an alias).
+Restart DSH Web afterwards.
+
+### Migrating from ≤0.4.x (dsh-easy-port-manager)
+
+```powershell
+dsh plugin --profile web remove dsh-easy-port-manager
+dsh plugin --profile web add dsh-instance-manager
+```
+
+Mixed fleets are supported: new panels discover and stop old instances, and old panels discover and stop new ones (the pre-rename API route is kept as an alias).
+
+## Uninstall
+
+```powershell
+dsh plugin --profile web remove dsh-instance-manager
+```
 
 ## How it works
 
-The host half registers a JSON route `/dsh-instance-manager/api` on the webserver (the pre-rename `/dsh-easy-port-manager/api` path is kept as an identical-behavior alias):
+The host half registers a JSON route `/dsh-instance-manager/api` on the webserver (the pre-rename `/dsh-easy-port-manager/api` path is kept as an identical alias):
 
 | Action | Method | Description |
 |---|---|---|
-| `action=list` | GET | Probes 3080–3129 concurrently: first asks `action=self` (instances mounting this bundle self-report pid / start time / session count), falling back to page-marker probing |
-| `action=self` | GET | Instance reports `{ pid, port, startedAt, sessions }` |
+| `action=list` | GET | Probes 3080–3129 concurrently: requests `action=self` for self-reporting instances, falls back to page-marker probing |
+| `action=self` | GET | Instance reports `{ pid, port, startedAt, sessions, rss }` |
 | `action=start` | POST | Starts a new dsh web instance on the first free port (detached + windowsHide) |
-| `action=stop&port=` | POST | If the target is self → delayed `appExit` graceful shutdown; otherwise forwards `stop-self` to the target |
-| `action=stop-all` | POST | Ends all managed instances (remote forwarding + own graceful shutdown) |
-| `action=stop-self` | POST | Graceful self shutdown; GET is also tolerated for forwarding peers running ≤0.4.1 |
+| `action=stop&port=` | POST | Self target → delayed `appExit` shutdown; otherwise forwards `stop-self` to the target |
+| `action=stop-all` | POST | Forwards stops to all managed instances in parallel, then exits itself |
+| `action=stop-self` | POST | Graceful self-shutdown; GET tolerated for ≤0.4.1 peer forwarding |
 
-No netstat/tasklist/powershell child processes are ever spawned; behavior is independent of the mounted shell executor.
+Instances without this bundle are identified by the injected `window.__DSH_BOOT__` manifest marker.
 
 ## Security model
 
-The API is meant for the local panel only. Loopback binding alone is not enough: browsers happily let any https page fire requests at `http://127.0.0.1:<port>` (loopback counts as a potentially trustworthy origin, so mixed-content blocking does not apply), and missing CORS only hides responses — it does not stop the request. Since 0.4.2:
+The API serves the local panel only. Browsers allow any page to send requests to `http://127.0.0.1:<port>` (loopback is exempt from mixed-content blocking, and missing CORS only hides responses — it does not prevent requests), so every action passes a shared guard:
 
-- **Mutating actions require POST** (`start` / `stop` / `stop-all`); `stop-self` additionally tolerates GET for legacy peer forwarding.
-- **Fetch Metadata check**: any request with `sec-fetch-site: cross-site` gets a 403 — modern browsers attach the header to every request, which covers img/form/fetch drive-bys from malicious pages.
-- **Origin check**: when an `Origin` header is present it must be this instance's loopback origin.
-- **Host check**: the `Host` header must name a loopback address, which also defeats DNS rebinding.
+- Mutating actions (`start` / `stop` / `stop-all`) require POST; `stop-self` additionally tolerates GET for ≤0.4.1 peer forwarding
+- Fetch Metadata: `sec-fetch-site` outside `same-origin` / `none` → 403
+- `Origin`, when present, must match this instance's loopback origin → else 403
+- `Host` must name a loopback address → else 403; also defeats DNS rebinding
 
 A malicious process already running locally can kill processes directly and is out of scope for this threat model.
 
 ## Structure
 
 ```
-package.json       npm metadata + dsh.bundle.patch + dsh.client (browser half registration)
+package.json       npm metadata + dsh.bundle.patch + dsh.client declaration
 cordis.patch.yml   inserts this plugin's loader row into the profile
-lib/index.js       host (/dsh-instance-manager/api JSON route, legacy path kept as alias)
-lib/client.js      client (ModuleLoader classic-script bundle: sidebar action + floating panel)
+lib/index.js       host: registers the /dsh-instance-manager/api JSON route
+lib/client.js      client: sidebar entry + floating panel (ModuleLoader bundle)
+CHANGELOG.md       changelog
 ```
 
 ## License

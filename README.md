@@ -1,84 +1,83 @@
 # dsh-instance-manager
 
-> 中文 | [English](./README.en.md)
+[中文](./README.md) | [English](./README.en.md)
 
-在 DSH Web 的侧边栏底部添加「dsh 管理」入口。点击后打开浮动面板，列出本机
-3080–3129 端口上的全部 dsh web 实例（端口 / PID / 状态），并可停止选定实例。
-（原名 `dsh-easy-port-manager`，0.5.0 起更名 —— 管的是实例生命周期，端口只是
-发现手段。）
-
-实例发现通过 HTTP 在本机实例之间完成；停止操作向目标实例发送请求，由其调用
-harness 的 `appExit` 正常退出，会话照常写入磁盘。整个流程不启动任何子进程。
-
+[![npm](https://img.shields.io/npm/v/dsh-instance-manager)](https://www.npmjs.com/package/dsh-instance-manager)
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
+在 DSH Web 侧边栏添加管理面板,列出本机 3080–3129 端口上的全部 dsh web 实例(端口 / PID / 运行时长 / 会话数 / 内存),支持启动新实例与优雅停止任意实例。
 
 ## 功能
 
-- **实例列表**：端口（链接直达）、PID、运行时长、活跃会话数、状态（当前会话 / 运行中 / 非 dsh 服务）；每 4 秒刷新一次，也可手动刷新。
-- **启动新实例**：在第一个空闲端口拉起一个新的 dsh web 实例（隐藏后台进程，日志写入 `~\.dsh\launcher\logs\`）。
-- **停止实例**：向目标实例发送退出请求；未挂载本面板的旧实例会禁用该项并说明原因。
-- **全部结束**：两步确认后结束所有托管实例（含当前窗口所在实例）。
-- **停止当前实例**：需两步确认；结束后当前界面断开，会话保持持久化，重启 DSH 后可继续原会话。
-- **样式**：颜色使用主题 token，随深浅色切换；除启动新实例外全程不启动子进程。
+- **实例列表**:端口(可点击直达)、PID、运行时长、活跃会话数、内存占用;状态标注(当前会话 / 运行中 / 非 dsh 服务);4 秒自动刷新,标签页隐藏时暂停
+- **启动新实例**:在第一个空闲端口以 detached 后台进程拉起新的 dsh web 实例,日志写入 `~\.dsh\launcher\logs\`
+- **停止实例**:向目标发送退出请求,由其调用 harness `appExit` 正常退出,会话照常落盘;未挂载本面板的旧实例禁用该项并提示原因
+- **停止当前实例 / 全部结束**:均需两步确认;结束后界面断开,重启 DSH 后会话自动恢复
+
+除「启动新实例」外全程不产生子进程,与挂载的 shell 执行器无关。
 
 ## 安装
 
 ```powershell
-# 方式一：Git 依赖直装（推荐，无需本地 clone，重启 DSH 生效）
-dsh plugin --profile web add "github:xswt442-cmd/dsh-instance-manager"
+# npm 包(推荐)
+dsh plugin --profile web add dsh-instance-manager
 
-# 方式二：本地 link（开发调试）
-dsh plugin --profile web add "E:\path\to\dsh-instance-manager"
+# Git 仓库直装
+dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 ```
 
-> 装完**重启 DSH Web** 后生效。
->
-> 从 `dsh-easy-port-manager` ≤0.4.x 升级：先 `dsh plugin --profile web remove dsh-easy-port-manager` 再按上面方式安装。新旧版本实例可混跑 —— 新面板能发现并停止旧实例，旧面板也能发现并停止新实例（旧路由以别名保留）。
+安装后重启 DSH Web 生效。
+
+### 从 ≤0.4.x(dsh-easy-port-manager)迁移
+
+```powershell
+dsh plugin --profile web remove dsh-easy-port-manager
+dsh plugin --profile web add dsh-instance-manager
+```
+
+新旧版本实例可以混跑:新面板能发现并停止旧实例,旧面板亦然(旧 API 路由以别名保留)。
 
 ## 卸载
 
 ```powershell
-dsh plugin --profile web remove dsh-easy-port-manager
+dsh plugin --profile web remove dsh-instance-manager
 ```
 
 ## 工作原理
 
-主机端在 webserver 上注册一个 JSON 路由 `/dsh-instance-manager/api`
-（旧路径 `/dsh-easy-port-manager/api` 以别名保留，行为完全一致）：
+主机端在 webserver 上注册 JSON 路由 `/dsh-instance-manager/api`(旧路径 `/dsh-easy-port-manager/api` 以别名保留):
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
-| `action=list` | GET | 并发探测 3080–3129：先问 `action=self`（挂载了本面板的实例会自报 pid / 启动时间 / 活跃会话数），再回退页面标记探测 |
-| `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions }` |
-| `action=start` | POST | 在第一个空闲端口启动新的 dsh web 实例（detached + windowsHide） |
-| `action=stop&port=` | POST | 目标是自己 → 延迟 300ms 走 `appExit` 优雅退出；否则转发 `stop-self` 给目标 |
-| `action=stop-all` | POST | 结束所有托管实例（远程转发 + 自身优雅退出） |
-| `action=stop-self` | POST | 自身优雅退出；额外容忍 GET，兼容 ≤0.4.1 旧实例的转发 |
+| `action=list` | GET | 并发探测 3080–3129:先请求 `action=self` 获取自报信息,其余回退页面标记探测 |
+| `action=self` | GET | 实例自报 `{ pid, port, startedAt, sessions, rss }` |
+| `action=start` | POST | 在第一个空闲端口启动新的 dsh web 实例(detached + windowsHide) |
+| `action=stop&port=` | POST | 目标是自己 → 延迟后走 `appExit` 优雅退出;否则向目标转发 `stop-self` |
+| `action=stop-all` | POST | 并行转发停止所有托管实例,最后自身优雅退出 |
+| `action=stop-self` | POST | 自身优雅退出;容忍 GET 以兼容 ≤0.4.1 的实例间转发 |
 
-全程不启动 netstat/tasklist/powershell 等任何子进程，与挂载的 shell 执行器无关。
+未挂载本面板的 dsh 实例通过注入的 `window.__DSH_BOOT__` 清单标记识别。
 
 ## 安全模型
 
-API 只面向本机面板，默认部署绑定回环地址。但浏览器允许任意 https 页面向
-`http://127.0.0.1:<端口>` 发请求（回环地址被视为潜在可信来源，不受混合内容
-拦截），缺失 CORS 也只能阻止对方读取响应、拦不住请求发出。因此 0.4.2 起：
+API 仅面向本机面板。浏览器允许任意页面请求 `http://127.0.0.1:<port>`(回环地址不受混合内容拦截,CORS 缺失仅阻止读取响应、不阻止请求发出),因此所有动作经过统一守卫:
 
-- **变更类动作只接受 POST**（`start` / `stop` / `stop-all`）；`stop-self`
-  额外容忍 GET 以兼容旧实例间的转发。
-- **Fetch Metadata 校验**：请求携带 `sec-fetch-site: cross-site` 一律 403
-  （现代浏览器对每个请求都会附加该头，恶意页面的 img/form/fetch 全部命中）。
-- **Origin 同源校验**：携带 `Origin` 时必须是本实例的回环同源。
-- **Host 回环校验**：`Host` 必须是回环地址名，同时封死 DNS rebinding。
+- 变更类动作(`start` / `stop` / `stop-all`)仅接受 POST;`stop-self` 额外容忍 GET,兼容 ≤0.4.1 实例间的转发
+- Fetch Metadata:`sec-fetch-site` 非 `same-origin` / `none` → 403
+- `Origin`:存在时必须与本实例回环同源 → 否则 403
+- `Host`:必须为回环地址名 → 否则 403,同时阻断 DNS rebinding
 
-不校验来源的本地恶意进程本来就能直接杀进程，不在威胁模型内。
+已在本地运行的恶意进程可直接结束任意进程,不在威胁模型内。
 
 ## 结构
 
 ```
-package.json       npm 元数据 + dsh.bundle.patch + dsh.client（浏览器半注册）
-cordis.patch.yml   向 profile 插入本插件行
-lib/index.js       host（/dsh-instance-manager/api JSON 路由，旧路径以别名保留）
-lib/client.js      client（ModuleLoader 经典脚本 bundle，侧边栏按钮 + 浮动面板）
+package.json       npm 元数据 + dsh.bundle.patch + dsh.client 声明
+cordis.patch.yml   向 profile 插入本插件 loader 行
+lib/index.js       host:注册 /dsh-instance-manager/api JSON 路由
+lib/client.js      client:侧边栏入口 + 浮动面板(ModuleLoader bundle)
+CHANGELOG.md       变更记录
 ```
 
 ## License
