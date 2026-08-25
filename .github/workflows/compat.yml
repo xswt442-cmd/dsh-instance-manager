@@ -21,6 +21,8 @@ jobs:
       - name: host module imports and exports a plugin
         run: |
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') { console.error('missing default plugin'); process.exit(1) } })"
+      - name: unit tests
+        run: npm test
       - name: manifest consistency
         shell: pwsh
         run: |
@@ -31,11 +33,16 @@ jobs:
           if ($client -notmatch [regex]::Escape("id: '$($pkg.name)'")) { Write-Error 'client bundle id does not match package name' }
           $patch = Get-Content cordis.patch.yml -Raw
           if ($patch -notmatch [regex]::Escape($pkg.name)) { Write-Error 'patch does not mount this package' }
+          $shared = Get-Content lib/shared.js -Raw
+          if ($shared -notmatch [regex]::Escape("VERSION = '$($pkg.version)'")) { Write-Error 'lib/shared.js VERSION does not match package version' }
 
   boot-check:
-    name: boot dsh web with bundle
-    continue-on-error: true
-    runs-on: windows-latest
+    name: boot dsh web with bundle (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,7 +50,8 @@ jobs:
           node-version: 24
       - name: install dsh
         run: npm i -g @deepseek-ai/dsh
-      - name: register bundle into a temp profile
+      - name: register bundle into a temp profile (windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           DSH_HOME: ${{ runner.temp }}\dshhome
@@ -63,7 +71,24 @@ jobs:
           # rewrite without BOM (JSON.parse rejects BOM)
           $json = Get-Content $pf -Raw | ConvertFrom-Json
           [System.IO.File]::WriteAllText($pf, ($json | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
-      - name: boot dsh web on 3129
+      - name: register bundle into a temp profile (linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          DSH_HOME: ${{ runner.temp }}/dshhome
+        run: |
+          mkdir -p "$DSH_HOME/profiles/web/node_modules"
+          ln -s "$GITHUB_WORKSPACE" "$DSH_HOME/profiles/web/node_modules/dsh-instance-manager"
+          cat > "$DSH_HOME/profiles/web/package.json" <<'EOF'
+          {
+            "name": "dsh-profile-web",
+            "private": true,
+            "dependencies": {},
+            "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-instance-manager"] } }
+          }
+          EOF
+      - name: boot dsh web on 3129 (windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           DSH_HOME: ${{ runner.temp }}\dshhome
@@ -99,3 +124,41 @@ jobs:
           if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
+      - name: boot dsh web on 3129 (linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          DSH_HOME: ${{ runner.temp }}/dshhome
+        run: |
+          globalRoot="$(npm root -g)"
+          dshBin="$globalRoot/@deepseek-ai/dsh/lib/bin.js"
+          [ -f "$dshBin" ] || { echo "::error::dsh bin not found at $dshBin"; exit 1; }
+          node "$dshBin" web --port 3129 &
+          pid=$!
+          code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "$@"; }
+          ready=0
+          for i in $(seq 60); do
+            sleep 1
+            [ "$(code http://127.0.0.1:3129/)" = "200" ] && { ready=1; break; }
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          if [ "$ready" != "1" ]; then
+            echo "::error::dsh web did not become ready"
+            kill "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          curl -s --noproxy '*' "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
+            || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }
+          curl -s --noproxy '*' "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" | grep -q '"pid"' \
+            || { echo "::error::legacy alias route not answered"; kill "$pid" 2>/dev/null; exit 1; }
+          [ "$(code http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js)" = "200" ] \
+            || { echo "::error::client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
+          # --- request-guard regression checks (see README 安全模型) ---
+          b="http://127.0.0.1:3129/dsh-instance-manager/api"
+          [ "$(code -X GET "$b?action=start")" = "405" ] || { echo "::error::guard regression: GET start must be 405"; exit 1; }
+          [ "$(code -X GET "$b?action=stop&port=1")" = "405" ] || { echo "::error::guard regression: GET stop must be 405"; exit 1; }
+          [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::guard regression: foreign Origin must be 403"; exit 1; }
+          [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
+          [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
+          kill "$pid" 2>/dev/null || true
+          echo "compat check passed"
