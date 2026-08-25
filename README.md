@@ -15,6 +15,7 @@
 - **实例详情**:点击行展开抽屉——启动时间、内存走势、stdout/stderr 日志尾随(最近 200 行)
 - **启停控制**:一键拉起新实例;优雅停止任意实例(`appExit`,会话落盘);停止当前实例与全部结束需二次确认
 - **中英切换**:面板头部「EN / 中」,偏好存 localStorage
+- **Agent 工具**:向会话内模型注册 `instance_list / instance_start / instance_stop / instance_logs`,agent 可直接查看与启停实例(工具拒绝停止当前实例)
 
 除「启动新实例」外全程不产生子进程。
 
@@ -58,6 +59,7 @@ API 仅面向本机面板。回环地址不受混合内容拦截、缺 CORS 也�
 package.json       npm 元数据 + dsh.bundle.patch + dsh.client 声明
 cordis.patch.yml   向 profile 插入本插件 loader 行
 lib/index.js       host:注册 /dsh-instance-manager/api JSON 路由
+lib/agent-tools.js host:instance_* 模型工具(tools 服务)
 lib/client.js      client:侧边栏入口 + 浮动面板(ModuleLoader bundle)
 lib/shared.js      host 纯函数(请求守卫 / bin 解析 / 注册表校验)
 test/              node:test 单元测试(npm test)

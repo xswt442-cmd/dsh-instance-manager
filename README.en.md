@@ -15,6 +15,7 @@ A management panel for the DSH Web sidebar: lists every dsh web instance on loca
 - **Instance details**: click a row to expand a drawer — start time, memory sparkline, stdout/stderr log tails (last 200 lines)
 - **Start / stop**: one-click new instance; graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice
 - **zh / EN toggle**: header button switches languages instantly; preference persists in localStorage
+- **Agent tools**: registers `instance_list / instance_start / instance_stop / instance_logs` with the in-session model, so agents can inspect and drive instances (the stop tool refuses to kill the current instance)
 
 Apart from launching new instances, no child processes are spawned.
 
@@ -58,6 +59,7 @@ A malicious process already running locally can kill processes directly and is o
 package.json       npm metadata + dsh.bundle.patch + dsh.client declaration
 cordis.patch.yml   inserts this plugin's loader row into the profile
 lib/index.js       host: registers the /dsh-instance-manager/api JSON route
+lib/agent-tools.js host: instance_* model tools (tools service)
 lib/client.js      client: sidebar entry + floating panel (ModuleLoader bundle)
 lib/shared.js      host pure helpers (guards / bin resolution / registry validation)
 test/              node:test unit suite (npm test)
