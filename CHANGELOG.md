@@ -11,7 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ### Fixed
 
-- Stopping the current instance (or all instances) now swaps the panel to a farewell screen and halts polling, instead of spinning into guaranteed-failing requests that surfaced a network-error banner. `window.close()` is attempted as a courtesy; since most browsers only honor it for script-opened windows, the visible "you can close this tab" message is the real fallback.
+- Stopping the current instance (or all instances) now swaps the panel to a farewell screen and halts polling, instead of spinning into guaranteed-failing requests that surfaced a network-error banner. The farewell tells the user they can close the tab; script-driven window closing was deliberately left out since browsers ignore it anyway.
 
 ## 0.6.1 — 2026-08-25
 
