@@ -23,11 +23,15 @@ if (-not (Test-Path (Join-Path $repoRoot 'lib\index.js'))) {
   throw "run this script from the dsh-instance-manager checkout (missing lib\index.js under $repoRoot)"
 }
 
-$item = Get-Item $dst -ErrorAction SilentlyContinue
-if ($item -and $item.LinkType) {
-  Write-Host "removing dev link ($($item.LinkType)) at $dst"
-  # Delete the LINK itself, never its target (the working tree!).
-  $item.Delete()
+# Link detection must use the ReparsePoint attribute: Get-Item on a directory
+# symlink can resolve through to the TARGET, and PS5.1's
+# `Remove-Item -Recurse` FOLLOWS directory links (it would delete the working
+# tree through the link). `cmd /c rmdir` removes the reparse point only.
+$dstItem = Get-Item $dst -Force -ErrorAction SilentlyContinue
+if ($dstItem -and ($dstItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+  Write-Host "removing dev link at $dst"
+  cmd /c rmdir "$dst" | Out-Null
+  if (Test-Path $dst) { throw "link removal failed — refusing to continue near the working tree" }
 } elseif (Test-Path $dst) {
   Write-Host "removing previous snapshot at $dst"
   Remove-Item -Recurse -Force $dst
