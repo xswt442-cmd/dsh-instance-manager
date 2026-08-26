@@ -19,7 +19,8 @@ import {
   unionPorts,
   summarizeSessions,
   diffManagedPorts,
-  parsePortRange
+  parsePortRange,
+  safeTokenEqual
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -108,6 +109,30 @@ test('guard Origin check follows the live currentPort()', () => {
   assert.equal(guard(reqOf({ origin: 'http://127.0.0.1:3080' })), false)
   assert.equal(guard(reqOf({ origin: 'http://127.0.0.1:3099' })), true)
   assert.equal(rejections.length, 1)
+})
+
+test('guard allowRemoteHost defers non-loopback Hosts to bearer verification', () => {
+  const rejections = []
+  const respond = (res, code, obj) => { rejections.push({ code, obj }) }
+  const fleetGuard = createGuard({ currentPort: () => 3080, respond, allowRemoteHost: () => true })
+  // Non-loopback Host passes the guard; the HANDLER owns the bearer gate.
+  assert.equal(fleetGuard(reqOf({ host: 'box.lan:3080' })), true)
+  // Defense-in-depth unchanged: foreign cross-site traffic still rejected.
+  assert.equal(fleetGuard(reqOf({ origin: 'https://evil.example', host: 'box.lan:3080' })), false)
+  assert.equal(fleetGuard(reqOf({ 'sec-fetch-site': 'cross-site', host: 'box.lan:3080' })), false)
+
+  // Without the flag, behavior is byte-for-byte the old strict mode.
+  const strictGuard = createGuard({ currentPort: () => 3080, respond })
+  assert.equal(strictGuard(reqOf({ host: 'box.lan:3080' })), false)
+  assert.equal(rejections.some((r) => r.obj.code === 'bad_host'), true)
+})
+
+test('safeTokenEqual fails closed and never leaks length by timing', () => {
+  assert.equal(safeTokenEqual('Bearer s3cret', 'Bearer s3cret'), true)
+  assert.equal(safeTokenEqual('Bearer s3cerx', 'Bearer s3cret'), false)
+  assert.equal(safeTokenEqual('Bearer s3cre', 'Bearer s3cret'), false, 'length mismatch')
+  assert.equal(safeTokenEqual('', 'Bearer s3cret'), false, 'empty header')
+  assert.equal(safeTokenEqual(undefined, undefined), false, 'both unconfigured')
 })
 
 test('resolveDshBin prefers the running entry script when it looks like one', () => {
