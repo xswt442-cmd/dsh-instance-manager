@@ -38,7 +38,10 @@ foreach ($name in 'lib', 'cordis.patch.yml', 'package.json', 'README.md', 'READM
   Copy-Item (Join-Path $repoRoot $name) $dst -Recurse -Force
 }
 
-$version = (Get-Content (Join-Path $dst 'package.json') -Raw | ConvertFrom-Json).version
+# Read as UTF-8 explicitly: package.json embeds Chinese descriptions, and
+# Get-Content defaults to the system ANSI codepage (GBK on zh-CN), which
+# corrupts UTF-8 and makes ConvertFrom-Json throw.
+$version = (Get-Content (Join-Path $dst 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
 Write-Host "deployed v$version -> $dst"
 Write-Host 'next: restart your dsh instances (panel「停止当前」then relaunch),'
 Write-Host 'and remember the working tree no longer feeds running instances.'
