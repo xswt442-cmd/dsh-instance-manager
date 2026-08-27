@@ -3,123 +3,127 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## 0.7.1 — 2026-08-26
+## 0.8.0 - 2026-08-27
 
 ### Added
 
-- **Crash black-box**: every mounted instance registers process-level `uncaughtException` / `unhandledRejection` hooks that append timestamped stacks (with pid+port) to `$DSH_HOME/launcher/logs/dshim-crash.log` BEFORE preserving node's exit-1 semantics — the next mystery death leaves a readable stack instead of silence. Hooks are released when the plugin disposes.
-- `DSHIM_PORT_RANGE="min-max"` overrides the sweep/start port band (default 3080–3129). Research note: nothing in the dsh runtime hard-codes the band — the webserver takes its port from composition config and even accepts 0 (OS-assigned) — so discovery stays heartbeat-driven and port-agnostic regardless of any range.
-
-### Fixed
-
-- **Crash hardening**: SSE subscriptions now attach `error` listeners to both streams — an abrupt client disconnect used to surface as an unhandled async `'error'` event, which node treats as fatal (prime suspect for「dsh 又莫名其妙崩了」with zero stderr). `broadcastFleet` also skips destroyed/writable-ended sockets.
-- 「启动新实例」no longer mis-reports slow FIRST sibling-instance boots as failures. The confirm window is now 25 s (was 10 s): one-time first-boot work in profile plugins (session-log backfills scanning every stored conversation) routinely runs past ten seconds — this was exactly the「第一次开第二个实例必失败、再试一次就好」trap, since the retry finds the backfill already done and boots instantly.
-- Panel-launched children spawn with `--no-open`: dsh's auto-opened browser tab used to land on a half-booted instance and read as a crash.
-- A child that exits during the confirm window leaves an exit-code breadcrumb in its launcher log (the child's own stderr is usually empty).
-
-## 0.7.0 — 2026-08-25
-
-### Added
-
-- Agent tools: registers `instance_list` / `instance_start` / `instance_stop` / `instance_logs` with the harness `tools` service, so the in-session agent can inspect and drive the local fleet directly. `@deepseek-ai/dsh-tools` resolves from this package first, then from the running dsh checkout's own dependency tree; when neither exists the panel keeps working without tools. The stop tool refuses to kill the instance hosting the conversation.
-- Cross-instance session summaries: new `action=sessions&port=` self-reports (or forwards to) any managed instance's live sessions — scalar fields only (id, created-at, cwd, subagent origin, event count), newest-first, capped at 20 rows. Surfaced in the instance drawer and through a fifth agent tool, `instance_sessions`. Pre-0.7 peers degrade to an explicit "unavailable" instead of failing.
-- Fleet up/down push over SSE (`GET /dsh-instance-manager/events`): one lazy diff-ticker per process broadcasts managed-port joins and leaves to every subscriber; clients get a silent baseline frame on connect, then bottom-right toasts on change — even with the panel closed. The ticker stops itself when the last subscriber disconnects.
-
-### Fixed
-
-- The instance-stop argument validation now rejects non-integer ports (e.g. 1.5) at both the tool and forwarding layers.
-
-## 0.6.2 — 2026-08-25
-
-### Added
-
-- The instance start time in the detail drawer now shows the viewer's IANA timezone beside the local time (e.g. `2026/8/25 17:23:45 (Asia/Shanghai)`). Rendered entirely client-side from the epoch — nothing about the timezone is reported or stored anywhere.
-
-### Fixed
-
-- Discovery now also lists instances whose heartbeat sits OUTSIDE the fixed 3080–3129 sweep (e.g. one hand-started with `--port 4000`) — registry-known ports join the sweep instead of being dropped.
-- 「启动新实例」now holds the request until the fresh child answers `action=self` and returns its `pid`; a child that dies immediately (lost the port race) retries once on the next free port instead of failing silently, and a slow-booting child is reported as `start_unconfirmed` rather than double-spawned. Covered by a new boot-check regression on both OSes.
-- Instance rows report the real process name (`path.basename(process.execPath)`) instead of a hardcoded `node.exe`, which read wrong on Linux.
-- Stopping the current instance (or all instances) now swaps the panel to a farewell screen and halts polling, instead of spinning into guaranteed-failing requests that surfaced a network-error banner. The farewell tells the user they can close the tab; script-driven window closing was deliberately left out since browsers ignore it anyway.
-
-## 0.6.1 — 2026-08-25
-
-### Added
-
-- Instance self-report now carries the plugin version (`version`), and the panel flags rows whose version differs from the serving instance (「版本差异」 badge) — mixed-fleet windows become visible, and a clean fleet is the objective signal for retiring the legacy alias route.
-- Bilingual UI: a self-contained zh/EN dictionary with a header toggle, persisted in localStorage (first open follows `navigator.language`). Host failure payloads now carry machine-readable `code`s that the client localizes; older panels keep showing the raw text.
-- Instance detail drawer: click any row for pid / start time / version, a memory sparkline built from the panel's own polling samples, and stdout/stderr log tails via `action=logs` — bounded 64KB / 200-line reads of the shared launcher logs, no peer forwarding needed.
-- File-based instance registry: every managed instance heartbeats `~\.dsh\run\instances\<port>.json` (10 s cadence, entries trusted for 30 s); `action=list` verifies fresh claims with a cheap `action=self` re-check and sweeps only the ports no heartbeat covers. The 50-port blind probe becomes the fallback path instead of the norm; graceful exits remove the file via the plugin disposer.
-- node:test unit suite (`npm test`) covering the request guards, loopback parsing, dsh-bin resolution, registry-entry validation, log tailing and self-probe racing; wired into the compat static job.
+- Fleet trust boundary (remote-fleet F1): dual-mode guard — loopback unchanged; non-loopback requests require `Authorization: Bearer` verified in constant time against a token resolved per request via the credentials service (`DSHIM_FLEET_TOKEN_REF`, default `DSHIM_FLEET_TOKEN`, plain-env fallback). Fail-closed when unresolvable; SSE `/events` stays loopback-only; `self` reports a stable `fleetId`.
+- `DSHIM_PORT_RANGE="min-max"` override for the sweep/start band (default 3080-3129).
+- `scripts/deploy-profile.ps1`: deploys a real-directory snapshot into the profile, replacing dev symlink mounts safely (edit the repo without touching running instances).
 
 ### Changed
 
-- Cross-platform: the dsh-launcher profile-path fallback is built with `path.join` instead of a Windows-only backslash literal.
-- Self-report discovery fans the current and pre-rename routes out concurrently instead of paying two serial timeouts per live port that answers neither.
-- Stop forwarding now waits up to 8s per attempt (was 5s): a freshly launched target can still be initializing when the stop arrives. A stop whose ack timed out but whose row disappears on the next refresh is no longer surfaced as an error.
-- CI: boot-check now runs on windows-latest AND ubuntu-latest (symlink + bash variant) and no longer tolerates failures (`continue-on-error` removed); publish sanity-check asserts `lib/shared.js VERSION` matches the release tag.
+- Panel de-crowded: stop-all shows only with 2+ managed instances; instance rows drop the process name; shorter footer.
+- Panel-spawned children run with `--trace-exit`, `--unhandled-rejections=strict`, `--report-uncaught-exception`.
+- `npm test` scoped to this package's suite.
 
-## 0.6.0 — 2026-08-24
+### Fixed
+
+- Panel-spawned children used the invalid flag `--report-on-uncaught-exception` (Node >= 20 rejects it; the child died instantly with code 9).
+
+## 0.7.1 - 2026-08-26
 
 ### Added
 
-- `action=self` now reports resident memory (`rss`); the panel shows a memory figure per instance. Zero-cost self-report — no child processes.
+- Crash black-box: fatal `uncaughtException` / `unhandledRejection` stacks (pid+port) append to `~/.dsh/launcher/logs/dshim-crash.log` before exit(1).
+- Launch confirm window 25 s (was 10 s); children spawn with `--no-open`; in-window child exits leave an exit-code breadcrumb in the launcher log.
+
+### Fixed
+
+- SSE subscriptions attach `error` listeners on both streams; broadcasts skip dead sockets (abrupt client disconnects were fatal to the process).
+- First sibling-instance launches no longer mis-report as failures while one-time first-boot backfills run.
+
+## 0.7.0 - 2026-08-25
+
+### Added
+
+- Agent tools `instance_list` / `instance_start` / `instance_stop` / `instance_logs` on the harness `tools` service; stop refuses the hosting instance; environments without `@deepseek-ai/dsh-tools` degrade to panel-only.
+- Cross-instance session summaries: `action=sessions&port=` (scalar fields, newest 20), shown in the drawer and via `instance_sessions`; pre-0.7 peers report unavailable.
+- SSE fleet up/down push at `/dsh-instance-manager/events` with a silent baseline frame; toasts on instance joins/leaves.
+
+### Fixed
+
+- Stop argument validation rejects non-integer ports.
+
+## 0.6.2 - 2026-08-25
+
+### Added
+
+- Drawer start time shows the viewer's IANA timezone.
+
+### Fixed
+
+- Stopping the current instance (or all) shows a farewell screen and halts polling instead of issuing doomed requests.
+
+## 0.6.1 - 2026-08-25
+
+### Added
+
+- Version badge with skew flag; bilingual zh/EN UI with persisted toggle; machine-readable error codes.
+- Instance drawer: pid / start time / version, memory sparkline, stdout/stderr log tails.
+- File heartbeat registry (`run/instances/<port>.json`, 10 s cadence / 30 s freshness) with verify-then-sweep discovery.
+- node:test unit suite wired into CI.
 
 ### Changed
 
-- CI boot-check now asserts the request guards regressively (GET mutations → 405, foreign Origin / cross-site metadata / non-loopback Host → 403).
-- Child-instance launch resolves node via `process.execPath` and dsh bin via the current process's own entry script — no more machine-specific install paths (also fixes cold CI-like environments).
-- Unbundled dsh instances are detected by the injected `window.__DSH_BOOT__` manifest marker first; the brand string remains as a legacy fallback.
+- Cross-platform dsh-bin fallback via `path.join`; concurrent self-probe racing; stop forwarding timeout 8 s; CI boot-check on Windows + Linux; publish asserts VERSION lockstep.
+
+## 0.6.0 - 2026-08-24
+
+### Added
+
+- `self` reports rss; panel shows memory per instance.
+- Unmounted dsh detection via the `window.__DSH_BOOT__` marker (brand string fallback).
+
+### Changed
+
+- Children spawn with `process.execPath` + the current entry script (no machine-specific paths); CI boot-check asserts guard regressions.
 
 ### Performance
 
-- The 4s auto-refresh pauses while the browser tab is hidden and issues an immediate refresh on return — an open panel previously swept up to 50 local ports even in a background tab.
+- 4 s auto-refresh pauses on hidden tabs and refreshes on return.
 
 ### Removed
 
-- Dead `port` field from the internal start payload; the free-port scan in「启动新实例」now reuses the shared scanner instead of duplicating it.
+- Dead `port` field in the internal start payload; start reuses the shared free-port scanner.
 
-## 0.5.0 — 2026-08-24
+## 0.5.0 - 2026-08-24
 
 ### Changed
 
-- **Package renamed** `dsh-easy-port-manager` → `dsh-instance-manager`: it manages instance lifecycles; ports are only the discovery mechanism. The old name collided with `dsh-port-manager` (a different plugin that hot-switches the web port).
-- CSS class prefix `easy-dshm-*` → `dshim-*`; slot ids and cordis loader row updated accordingly.
+- Renamed `dsh-easy-port-manager` -> `dsh-instance-manager`; CSS prefix `easy-dshm-*` -> `dshim-*`.
 
 ### Compatibility
 
-- The pre-rename API route `/dsh-easy-port-manager/api` stays registered as an identical-behavior alias.
-- Discovery and stop forwarding fall back to that path, so ≤0.4.x and ≥0.5.0 instances interoperate in both directions inside a mixed fleet.
+- Pre-rename API route stays as an alias; discovery and stop forwarding interoperate with <= 0.4.x.
 
-## 0.4.2 — 2026-08-24
+## 0.4.2 - 2026-08-24
 
 ### Fixed
 
-- Client busy map was written keyed by port but read by pid — the「停止中…」label and button disable never fired.
-- Two-step confirm stored a port into a pid-named state and compared against pid — the「确认结束？」highlight never rendered. State renamed to `confirmPort`, compared by port everywhere.
-- Unmanaged rows rendered "pid null"; pid is now shown only when present.
-- `package.json` description was double-encoded mojibake; rewritten as clean bilingual text. Manifest formatting repaired (was PowerShell `ConvertTo-Json` output); added `engines` and a minimal `dshhub` metadata block.
+- Busy map and two-step confirm keyed by port (were pid); unmanaged rows no longer render "pid null"; repaired package.json manifest.
 
 ### Security
 
-- Mutating actions (`start` / `stop` / `stop-all`) require POST; `stop-self` additionally tolerates GET for ≤0.4.1 peer forwarding.
-- Every action runs behind request guards rejecting browser-initiated cross-site traffic: Fetch Metadata (`sec-fetch-site` outside `same-origin|none`), foreign `Origin`, non-loopback `Host` (also defeats DNS rebinding).
-- `stop-all` forwards stops in parallel instead of a serial 5s-per-target wait.
+- Mutating actions require POST (`stop-self` tolerates GET for legacy peers).
+- Guards reject cross-site traffic: Fetch Metadata, foreign Origin, non-loopback Host (DNS rebinding).
+- stop-all forwards stops in parallel.
 
-## 0.4.1 — 2026-08-24
+## 0.4.1 - 2026-08-24
 
 ### Fixed
 
-- Force-exit backstop after graceful shutdown: the harness shutdown relies on the event loop draining, and a lingering handle could hold the process alive forever.
+- Force-exit backstop after graceful shutdown so a lingering handle cannot hold the process.
 
-## 0.4.0 — 2026-08-24
+## 0.4.0 - 2026-08-24
 
 ### Added
 
-- Launch a new dsh web instance from the panel (first free port, detached + hidden background, logs under `~\.dsh\launcher\logs\`).
-- Stop-all flow with two-step confirmation.
-- Instance self-report extended with start time and active session count (uptime + session columns in the panel).
+- Launch a new instance from the panel (first free port, detached, logs under launcher logs).
+- Stop-all with two-step confirmation; self-report start time and session count.
 
-## 0.3.x and earlier — 2026-08-23
+## 0.3.0 - 2026-08-23
 
-- Initial public release: persistent sidebar panel listing local dsh web instances on ports 3080–3129 with graceful one-click stop of any instance carrying the bundle.
+### Added
+
+- Initial release: sidebar panel listing local dsh web instances on 3080-3129 with graceful stop.
