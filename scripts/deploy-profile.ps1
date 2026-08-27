@@ -27,15 +27,23 @@ if (-not (Test-Path (Join-Path $repoRoot 'lib\index.js'))) {
 # symlink can resolve through to the TARGET, and PS5.1's
 # `Remove-Item -Recurse` FOLLOWS directory links (it would delete the working
 # tree through the link). `cmd /c rmdir` removes the reparse point only.
-$dstItem = Get-Item $dst -Force -ErrorAction SilentlyContinue
-if ($dstItem -and ($dstItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-  Write-Host "removing dev link at $dst"
-  cmd /c rmdir "$dst" | Out-Null
-  if (Test-Path $dst) { throw "link removal failed — refusing to continue near the working tree" }
-} elseif (Test-Path $dst) {
-  Write-Host "removing previous snapshot at $dst"
-  Remove-Item -Recurse -Force $dst
+# Removal can race a running instance's file watcher: a deleted-but-still-
+# referenced directory enters Windows "delete pending" and recreating it
+# fails with access denied. Retry until the name is really gone.
+for ($attempt = 0; $attempt -lt 12; $attempt++) {
+  if (-not (Test-Path $dst)) { break }
+  $dstItem = Get-Item $dst -Force -ErrorAction SilentlyContinue
+  if ($dstItem -and ($dstItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    Write-Host "removing dev link at $dst"
+    cmd /c rmdir "$dst" | Out-Null
+    if (Test-Path $dst) { throw "link removal failed — refusing to continue near the working tree" }
+  } else {
+    Write-Host "removing previous snapshot at $dst"
+    Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+  }
 }
+if (Test-Path $dst) { throw "could not clear $dst — a running instance's watcher still holds it; stop instances first, then re-run" }
 
 New-Item -ItemType Directory -Force $dst | Out-Null
 foreach ($name in 'lib', 'cordis.patch.yml', 'package.json', 'README.md', 'README.en.md') {
