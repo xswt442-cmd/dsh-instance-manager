@@ -5,7 +5,7 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "node --test test/host.test.js test/agent-tools.test.js"
+    "test": "node --test test/host.test.js test/agent-tools.test.js test/fleet.test.js"
   },
   "exports": {
     ".": "./lib/index.js",
