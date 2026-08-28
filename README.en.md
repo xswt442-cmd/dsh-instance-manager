@@ -6,7 +6,9 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-A management panel for the DSH Web sidebar: lists every dsh web instance on local ports 3080–3129, with launch, graceful stop, and per-instance details.
+A management panel launched from the shared createhelper utility dock in DSH Web: lists every dsh web instance on local ports 3080–3129, with launch, graceful stop, and per-instance details.
+
+The dock is one small page-level tray shared with other createhelper utilities such as dsh-treekeeper — whichever plugin loads first creates it, the rest register a button into it. Placement (bottom-left following the sidebar edge / bottom-right / hidden) is switchable and remembered in localStorage.
 
 ## Features
 
@@ -18,6 +20,7 @@ A management panel for the DSH Web sidebar: lists every dsh web instance on loca
 - **Agent tools**: registers `instance_list / instance_start / instance_stop / instance_logs / instance_sessions` with the in-session model, so agents can inspect and drive instances (the stop tool refuses to kill the current instance)
 - **Up/down toasts**: managed instances joining or leaving pop an instant toast bottom-right via SSE — even while the panel is closed
 - **Session summaries**: inspect any managed instance's live sessions from the drawer (time / cwd / subagent / activity)
+- **Shared utility dock**: the entry point is one button in a page-level tray shared with other createhelper utilities (dsh-treekeeper); placement (bottom-left / bottom-right / hidden) is switchable and remembered
 
 Apart from launching new instances, no child processes are spawned.
 
@@ -72,7 +75,7 @@ package.json       npm metadata + dsh.bundle.patch + dsh.client declaration
 cordis.patch.yml   inserts this plugin's loader row into the profile
 lib/index.js       host: registers the /dsh-instance-manager/api JSON route
 lib/agent-tools.js host: instance_* model tools (tools service)
-lib/client.js      client: sidebar entry + floating panel (ModuleLoader bundle)
+lib/client.js      client: dock entry + floating panel (ModuleLoader bundle)
 lib/shared.js      host pure helpers (guards / bin resolution / registry validation)
 test/              node:test unit suite (npm test)
 CHANGELOG.md       changelog

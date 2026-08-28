@@ -1,7 +1,7 @@
 {
   "name": "dsh-instance-manager",
   "version": "0.8.0",
-  "description": "DSH 实例管理面板：侧边栏入口列出本机 3080–3129 端口的全部 dsh web 实例（端口 / PID / 运行时长 / 会话数），支持优雅停止、两步确认停止当前实例、一键全部结束与新实例启动。Sidebar panel for DeepSeek Harness: list every local dsh web instance on ports 3080-3129 (port/PID/uptime/sessions) with graceful stop, Task-Manager-style stop of the current instance, stop-all, and one-click launch of a new instance.",
+  "description": "DSH 实例管理面板：共享工具坞入口列出本机 3080–3129 端口的全部 dsh web 实例（端口 / PID / 运行时长 / 会话数），支持优雅停止、两步确认停止当前实例、一键全部结束与新实例启动。Dock-launched panel for DeepSeek Harness: list every local dsh web instance on ports 3080-3129 (port/PID/uptime/sessions) with graceful stop, Task-Manager-style stop of the current instance, stop-all, and one-click launch of a new instance.",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   "dshhub": {
     "schemaVersion": 1,
     "displayName": "instance-manager",
-    "summary": "侧边栏面板统一查看并停止本机 3080–3129 端口的 dsh web 实例：端口、PID、运行时长、会话数，优雅退出（会话落盘），含启动新实例与一键全部结束。",
+    "summary": "统一查看并停止本机 3080–3129 端口的 dsh web 实例：端口、PID、运行时长、会话数，优雅退出（会话落盘），含启动新实例与一键全部结束；入口位于共享工具坞，与 dsh-treekeeper 等 createhelper 工具同栏。",
     "categories": ["dev", "Web UI"],
     "surfaces": ["host", "web"],
     "capabilities": {},

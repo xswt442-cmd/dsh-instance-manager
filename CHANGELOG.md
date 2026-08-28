@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ### Added
 
 - Remote-fleet F2 (peer links): `/dsh-instance-manager/link` WebSocket upgrade (always bearer-authenticated, fail-closed without a token) answers `ping` / `fleet` queries; `DSHIM_PEERS="id@origin,..."` dials peers with exponential-backoff reconnects and 30 s ping/pong liveness. `action=list` merges peer fleets (2 s cache, 3.5 s per-peer budget) with rows tagged by peer id and rewritten to peer-origin URLs. Remote rows are read-only in the panel (source badge, stop disabled, drawer hint) and excluded from stop-all and the local up/down differ; `instance_list` gains an optional `source` field.
+- Shared utility dock: the panel entry moves out of the `sidebar.footer.action` slot into a page-level utility tray shared with dsh-treekeeper (`__CREATEHELPER_DSH_UTILITY_DOCK_V1__` — whichever plugin loads first creates the tray, the rest register a button into it). Dock placement (bottom-left following the live sidebar edge / bottom-right / hidden) is switchable and persisted in localStorage; plugin disposal removes its own button.
 
 ## 0.8.0 - 2026-08-27
 

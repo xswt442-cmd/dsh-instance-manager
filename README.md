@@ -6,7 +6,9 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-在 DSH Web 侧边栏添加管理面板:列出本机 3080–3129 端口上的全部 dsh web 实例,支持启动、优雅停止与详情查看。
+在 DSH Web 的共享工具坞(createhelper utility dock)添加管理入口:列出本机 3080–3129 端口上的全部 dsh web 实例,支持启动、优雅停止与详情查看。
+
+工具坞是页面级的小托盘,与 dsh-treekeeper 等其他 createhelper 工具共用——谁先加载谁创建,后来者往里注册按钮。位置(跟随侧边栏左下 / 右下 / 隐藏)可在坞上切换,偏好存 localStorage。
 
 ## 功能
 
@@ -18,6 +20,7 @@
 - **Agent 工具**:向会话内模型注册 `instance_list / instance_start / instance_stop / instance_logs / instance_sessions`,agent 可直接查看与启停实例(工具拒绝停止当前实例)
 - **上下线提醒**:托管实例上/下线时右下角即时 toast(SSE 推送,面板关着也生效)
 - **会话概要**:抽屉内查看任意托管实例的活跃会话(时间 / 目录 / 子代理 / 活动量)
+- **共享工具坞**:入口是页面级工具坞里的一个按钮,与 dsh-treekeeper 等 createhelper 工具共用同一个托盘;位置(左下 / 右下 / 隐藏)可切换并记住
 
 除「启动新实例」外全程不产生子进程。
 
@@ -72,7 +75,7 @@ package.json       npm 元数据 + dsh.bundle.patch + dsh.client 声明
 cordis.patch.yml   向 profile 插入本插件 loader 行
 lib/index.js       host:注册 /dsh-instance-manager/api JSON 路由
 lib/agent-tools.js host:instance_* 模型工具(tools 服务)
-lib/client.js      client:侧边栏入口 + 浮动面板(ModuleLoader bundle)
+lib/client.js      client:工具坞入口 + 浮动面板(ModuleLoader bundle)
 lib/shared.js      host 纯函数(请求守卫 / bin 解析 / 注册表校验)
 test/              node:test 单元测试(npm test)
 CHANGELOG.md       变更记录
