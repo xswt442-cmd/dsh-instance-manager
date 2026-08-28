@@ -25,6 +25,8 @@ const LINK_PATH = '/dsh-instance-manager/link'
 const mount = ({ upgradeSupport = true } = {}) => {
   const routes = []
   const upgrades = []
+  const getCalls = []
+  const listeners = new Map()
   const webServer = {
     // Undefined port: registryFile() returns null, so apply touches no files.
     port: undefined,
@@ -42,17 +44,33 @@ const mount = ({ upgradeSupport = true } = {}) => {
   const disposers = []
   const ctx = {
     webServer,
-    get: (name) => (name === 'webServer' ? webServer : undefined),
+    get: (name) => {
+      getCalls.push(name)
+      return name === 'webServer' ? webServer : undefined
+    },
     effect(factory) {
       const result = factory()
       for (const d of Array.isArray(result) ? result : [result]) {
         if (typeof d === 'function') disposers.push(d)
       }
     },
-    on: () => () => {}
+    on: (event, fn) => {
+      if (!listeners.has(event)) listeners.set(event, new Set())
+      listeners.get(event).add(fn)
+      return () => { listeners.get(event).delete(fn) }
+    }
   }
   plugin.apply(ctx)
-  return { routes, upgrades, dispose: () => { disposers.reverse().forEach((d) => d()) } }
+  const emit = (event, ...args) => {
+    for (const fn of listeners.get(event) ?? []) fn(...args)
+  }
+  return {
+    routes,
+    upgrades,
+    getCalls,
+    emit,
+    dispose: () => { disposers.reverse().forEach((d) => d()) }
+  }
 }
 
 const paths = (routes) => routes.map((r) => r.path)
@@ -95,6 +113,24 @@ test('disposal releases every route, upgrade included', () => {
   dispose()
   assert.equal(routes.length, 0)
   assert.equal(upgrades.length, 0)
+})
+
+test('the optional tools service is re-resolved when it appears after apply', () => {
+  // Loader rows activate on service availability, not on row order, so a
+  // single ctx.get('tools') at apply time silently lost the agent tools
+  // whenever the service mounted later. The row cannot inject it either —
+  // a composition without tools would hang in PENDING and fail the boot audit.
+  const { getCalls, emit, dispose } = mount()
+  try {
+    const lookups = () => getCalls.filter((name) => name === 'tools').length
+    const before = lookups()
+    emit('internal/service', 'sessions')
+    assert.equal(lookups(), before, 'an unrelated service must not retrigger the tools lookup')
+    emit('internal/service', 'tools')
+    assert.equal(lookups(), before + 1, 'the tools service arriving after apply must be picked up')
+  } finally {
+    dispose()
+  }
 })
 
 test('the fatal handler records the breadcrumb without pre-empting the harness exit', () => {
