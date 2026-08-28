@@ -123,6 +123,8 @@ jobs:
           $b = "http://127.0.0.1:3129/dsh-instance-manager/api"
           if ((ApiCode GET "$b`?action=start") -ne '405') { Write-Error 'guard regression: GET start must be 405' }
           if ((ApiCode GET "$b`?action=stop&port=1") -ne '405') { Write-Error 'guard regression: GET stop must be 405' }
+          # safe to probe: the 405 is returned before any self-exit is scheduled
+          if ((ApiCode GET "$b`?action=stop-self") -ne '405') { Write-Error 'guard regression: GET stop-self must be 405' }
           if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'guard regression: foreign Origin must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
@@ -178,6 +180,8 @@ jobs:
           b="http://127.0.0.1:3129/dsh-instance-manager/api"
           [ "$(code -X GET "$b?action=start")" = "405" ] || { echo "::error::guard regression: GET start must be 405"; exit 1; }
           [ "$(code -X GET "$b?action=stop&port=1")" = "405" ] || { echo "::error::guard regression: GET stop must be 405"; exit 1; }
+          # safe to probe: the 405 is returned before any self-exit is scheduled
+          [ "$(code -X GET "$b?action=stop-self")" = "405" ] || { echo "::error::guard regression: GET stop-self must be 405"; exit 1; }
           [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::guard regression: foreign Origin must be 403"; exit 1; }
           [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
           [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
