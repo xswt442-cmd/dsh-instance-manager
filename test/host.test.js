@@ -12,6 +12,7 @@ import {
   hostHostname,
   createGuard,
   resolveDshBin,
+  resolveDshHome,
   registryDir,
   isValidRegistryEntry,
   firstNonNull,
@@ -298,4 +299,23 @@ test('tailFile returns whole lines only, bounded by maxLines and maxBytes', asyn
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('resolveDshHome follows the harness precedence and treats blank as unset', () => {
+  const home = '/home/tester'
+  const fallback = path.resolve(path.join(home, '.dsh'))
+  assert.equal(resolveDshHome({ DSH_HOME: '/srv/dsh' }, home), path.resolve('/srv/dsh'))
+  assert.equal(resolveDshHome({}, home), fallback)
+  assert.equal(resolveDshHome({ DSH_HOME: '' }, home), fallback)
+  assert.equal(resolveDshHome({ DSH_HOME: '   ' }, home), fallback)
+  // A configured home that does not exist yet is still the home: the harness
+  // creates it on demand, and falling back here would split the registry.
+  assert.equal(resolveDshHome({ DSH_HOME: '/not/created/yet' }, home), path.resolve('/not/created/yet'))
+})
+
+test('resolveDshHome expands a tilde prefix against the OS home', () => {
+  const home = '/home/tester'
+  assert.equal(resolveDshHome({ DSH_HOME: '~' }, home), path.resolve(home))
+  assert.equal(resolveDshHome({ DSH_HOME: '~/elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
+  assert.equal(resolveDshHome({ DSH_HOME: '~\\elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
 })
