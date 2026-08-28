@@ -18,6 +18,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - The panel no longer disappears silently when the `slots` service is not ready at `apply` time: the client half waits through `ctx.inject(['slots'], …)` instead of probing once and returning.
 - `$DSH_HOME` now resolves with the harness's own precedence (non-blank wins, blank is unset, `~` expands) and no longer requires the directory to exist. Previously a first run against a fresh `$DSH_HOME` fell back to `~/.dsh`, splitting the instance registry and launcher logs away from the instance being managed.
 
+### Changed
+
+- `stop-self` is POST-only now, like every other mutating action; a GET answers 405. It tolerated GET solely because ≤0.4.1 peers forwarded stops that way.
+
+### Removed
+
+- **Breaking:** the pre-rename `/dsh-easy-port-manager/api` alias, together with every ≤0.4.1 compatibility path behind it — the legacy self-report probe in `action=list` and the GET fallback when forwarding a stop. An instance still running ≤0.4.1 can no longer be discovered or stopped by this version, nor discover or stop one; instances from 0.5.0 onward are unaffected. Check the panel's version-skew badge before upgrading a fleet that may still hold an old instance.
+
 ## 0.8.0 - 2026-08-27
 
 ### Added

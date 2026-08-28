@@ -19,7 +19,6 @@ import plugin from '../lib/index.js'
 
 const API_PATH = '/dsh-instance-manager/api'
 const EVENTS_PATH = '/dsh-instance-manager/events'
-const LEGACY_PATH = '/dsh-easy-port-manager/api'
 const LINK_PATH = '/dsh-instance-manager/link'
 
 const mount = ({ upgradeSupport = true } = {}) => {
@@ -75,10 +74,10 @@ const mount = ({ upgradeSupport = true } = {}) => {
 
 const paths = (routes) => routes.map((r) => r.path)
 
-test('host registers the JSON api, the SSE stream, and the pre-rename alias', () => {
+test('host registers the JSON api and the SSE stream, and nothing else', () => {
   const { routes, dispose } = mount()
   try {
-    assert.deepEqual(paths(routes).sort(), [API_PATH, EVENTS_PATH, LEGACY_PATH].sort())
+    assert.deepEqual(paths(routes).sort(), [API_PATH, EVENTS_PATH].sort())
     for (const route of routes) assert.equal(route.kind, 'exact')
   } finally {
     dispose()
@@ -100,7 +99,7 @@ test('a webserver without upgrade support still mounts the panel', () => {
   const { routes, upgrades, dispose } = mount({ upgradeSupport: false })
   try {
     assert.equal(upgrades.length, 0)
-    assert.deepEqual(paths(routes).sort(), [API_PATH, EVENTS_PATH, LEGACY_PATH].sort())
+    assert.deepEqual(paths(routes).sort(), [API_PATH, EVENTS_PATH].sort())
   } finally {
     dispose()
   }
@@ -108,7 +107,7 @@ test('a webserver without upgrade support still mounts the panel', () => {
 
 test('disposal releases every route, upgrade included', () => {
   const { routes, upgrades, dispose } = mount()
-  assert.equal(routes.length, 3)
+  assert.equal(routes.length, 2)
   assert.equal(upgrades.length, 1)
   dispose()
   assert.equal(routes.length, 0)

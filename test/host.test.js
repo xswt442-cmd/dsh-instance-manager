@@ -15,7 +15,6 @@ import {
   resolveDshHome,
   registryDir,
   isValidRegistryEntry,
-  firstNonNull,
   tailFile,
   unionPorts,
   summarizeSessions,
@@ -187,21 +186,6 @@ test('registry entries validate structurally and by freshness', () => {
   ]) {
     assert.equal(isValidRegistryEntry(bad, now), false, JSON.stringify(bad))
   }
-})
-
-test('firstNonNull resolves the first fulfilled non-null value', async () => {
-  assert.equal(await firstNonNull([async () => null, async () => 'b']), 'b')
-  assert.equal(await firstNonNull([async () => { throw new Error('x') }, async () => 7]), 7)
-})
-
-test('firstNonNull resolves null when everything misses or rejects', async () => {
-  const slowNull = () => new Promise((resolve) => setTimeout(() => resolve(null), 5))
-  assert.equal(await firstNonNull([
-    async () => { throw new Error('x') },
-    async () => null,
-    slowNull
-  ]), null)
-  assert.equal(await firstNonNull([]), null)
 })
 
 test('unionPorts merges the sweep range with out-of-range heartbeat ports', () => {
