@@ -3,13 +3,15 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## Unreleased
+## 0.9.0 - 2026-08-27
 
 ### Added
 
 - Remote-fleet F2 (peer links): `/dsh-instance-manager/link` WebSocket upgrade (always bearer-authenticated, fail-closed without a token) answers `ping` / `fleet` queries; `DSHIM_PEERS="id@origin,..."` dials peers with exponential-backoff reconnects and 30 s ping/pong liveness. `action=list` merges peer fleets (2 s cache, 3.5 s per-peer budget) with rows tagged by peer id and rewritten to peer-origin URLs. Remote rows are read-only in the panel (source badge, stop disabled, drawer hint) and excluded from stop-all and the local up/down differ; `instance_list` gains an optional `source` field.
+- Remote-fleet F3 (read-only over the link): `action=sessions` / `action=logs` accept `peer=` and forward through the peer link (peers answer `sessions` / `logs` query kinds); the panel drawer reads remote rows' sessions and logs; `instance_sessions` / `instance_logs` accept an optional `peer` argument. Peer reachability transitions (up/down) broadcast on the existing SSE frames and toast bottom-right.
 - Fleet trust documentation: a configured peer is a trusted operator of this machine, not a read-only observer. The fleet token is a symmetric key with no action-level scoping, so a peer holding it can `start` (spawn processes), `stop` / `stop-all` (shut down local instances, this one included) and `sessions` (read session working directories).
 - Shared utility dock: the panel entry moves out of the `sidebar.footer.action` slot into a page-level utility tray shared with dsh-treekeeper (`__CREATEHELPER_DSH_UTILITY_DOCK_V1__` — whichever plugin loads first creates the tray, the rest register a button into it). Dock placement (bottom-left following the live sidebar edge / bottom-right / hidden) is switchable and persisted in localStorage; plugin disposal removes its own button.
+- CI: the fleet link upgrade must fail closed without a token (403) on both OSes.
 
 ### Fixed
 

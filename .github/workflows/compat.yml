@@ -142,6 +142,9 @@ jobs:
           $evReq = [System.Net.WebRequest]::Create("$evBase/events")
           $evResp = $evReq.GetResponse()
           try { if ($evResp.ContentType -notlike 'text/event-stream*') { Write-Error "unexpected SSE content type: $($evResp.ContentType)" } } finally { $evResp.Close() }
+          # --- fleet link fails closed without a token (F1/F2 regression) ---
+          $linkCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link"
+          if ($linkCode -ne '403') { Write-Error "fleet link must fail closed without a token (got $linkCode)" }
           $null = Invoke-RestMethod -Method Post -Uri "$b`?action=stop&port=$($start.port)" -TimeoutSec 30
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
@@ -198,6 +201,9 @@ jobs:
           ev_root="${b%/api}"
           curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true
           grep -qi 'text/event-stream' /tmp/dshim-ev-h.txt || { echo "::error::SSE endpoint missing"; kill "$pid" 2>/dev/null || true; exit 1; }
+          # --- fleet link fails closed without a token (F1/F2 regression) ---
+          link_code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link")
+          [ "$link_code" = "403" ] || { echo "::error::fleet link must fail closed without a token (got $link_code)"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
           kill "$pid" 2>/dev/null || true
           echo "compat check passed"
