@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - Remote-fleet F2 (peer links): `/dsh-instance-manager/link` WebSocket upgrade (always bearer-authenticated, fail-closed without a token) answers `ping` / `fleet` queries; `DSHIM_PEERS="id@origin,..."` dials peers with exponential-backoff reconnects and 30 s ping/pong liveness. `action=list` merges peer fleets (2 s cache, 3.5 s per-peer budget) with rows tagged by peer id and rewritten to peer-origin URLs. Remote rows are read-only in the panel (source badge, stop disabled, drawer hint) and excluded from stop-all and the local up/down differ; `instance_list` gains an optional `source` field.
 - Shared utility dock: the panel entry moves out of the `sidebar.footer.action` slot into a page-level utility tray shared with dsh-treekeeper (`__CREATEHELPER_DSH_UTILITY_DOCK_V1__` — whichever plugin loads first creates the tray, the rest register a button into it). Dock placement (bottom-left following the live sidebar edge / bottom-right / hidden) is switchable and persisted in localStorage; plugin disposal removes its own button.
 
+### Fixed
+
+- F2 link route was built but never registered through `webServer.registerUpgrade`, so no instance ever accepted an inbound socket: every peer's `fleet` query timed out and peer status stayed `offline`. The peer hub is now disposed with the plugin too, and its reconnect timers no longer hold the process open.
+- The crash black-box no longer pre-empts the harness fatal-exit path. It recorded the breadcrumb and called `process.exit(1)` unconditionally, but the harness installs its own `unhandledRejection` handler first and awaits a release (disposing the tree, flushing sessions) before exiting — the plugin's exit landed second and truncated it. The exit is now taken only when no other listener owns it.
+- Agent tools are no longer lost to mount order. `ctx.get('tools')` was read once during `apply`, so whenever the tools service mounted afterwards the `instance_*` tools were silently skipped. The lookup now retries on the cordis `internal/service` signal; the service stays optional, because injecting it would park the row in `PENDING` (a boot-audit failure) on compositions that have no tools service.
+- The panel no longer disappears silently when the `slots` service is not ready at `apply` time: the client half waits through `ctx.inject(['slots'], …)` instead of probing once and returning.
+- `$DSH_HOME` now resolves with the harness's own precedence (non-blank wins, blank is unset, `~` expands) and no longer requires the directory to exist. Previously a first run against a fresh `$DSH_HOME` fell back to `~/.dsh`, splitting the instance registry and launcher logs away from the instance being managed.
+
 ## 0.8.0 - 2026-08-27
 
 ### Added
