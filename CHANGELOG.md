@@ -3,11 +3,31 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## Unreleased
+## 0.9.0 - 2026-08-27
 
 ### Added
 
 - Remote-fleet F2 (peer links): `/dsh-instance-manager/link` WebSocket upgrade (always bearer-authenticated, fail-closed without a token) answers `ping` / `fleet` queries; `DSHIM_PEERS="id@origin,..."` dials peers with exponential-backoff reconnects and 30 s ping/pong liveness. `action=list` merges peer fleets (2 s cache, 3.5 s per-peer budget) with rows tagged by peer id and rewritten to peer-origin URLs. Remote rows are read-only in the panel (source badge, stop disabled, drawer hint) and excluded from stop-all and the local up/down differ; `instance_list` gains an optional `source` field.
+- Remote-fleet F3 (read-only over the link): `action=sessions` / `action=logs` accept `peer=` and forward through the peer link (peers answer `sessions` / `logs` query kinds); the panel drawer reads remote rows' sessions and logs; `instance_sessions` / `instance_logs` accept an optional `peer` argument. Peer reachability transitions (up/down) broadcast on the existing SSE frames and toast bottom-right.
+- Fleet trust documentation: a configured peer is a trusted operator of this machine, not a read-only observer. The fleet token is a symmetric key with no action-level scoping, so a peer holding it can `start` (spawn processes), `stop` / `stop-all` (shut down local instances, this one included) and `sessions` (read session working directories).
+- Shared utility dock: the panel entry moves out of the `sidebar.footer.action` slot into a page-level utility tray shared with dsh-treekeeper (`__CREATEHELPER_DSH_UTILITY_DOCK_V1__` — whichever plugin loads first creates the tray, the rest register a button into it). Dock placement (bottom-left following the live sidebar edge / bottom-right / hidden) is switchable and persisted in localStorage; plugin disposal removes its own button.
+- CI: the fleet link upgrade must fail closed without a token (403) on both OSes.
+
+### Fixed
+
+- F2 link route was built but never registered through `webServer.registerUpgrade`, so no instance ever accepted an inbound socket: every peer's `fleet` query timed out and peer status stayed `offline`. The peer hub is now disposed with the plugin too, and its reconnect timers no longer hold the process open.
+- The crash black-box no longer pre-empts the harness fatal-exit path. It recorded the breadcrumb and called `process.exit(1)` unconditionally, but the harness installs its own `unhandledRejection` handler first and awaits a release (disposing the tree, flushing sessions) before exiting — the plugin's exit landed second and truncated it. The exit is now taken only when no other listener owns it.
+- Agent tools are no longer lost to mount order. `ctx.get('tools')` was read once during `apply`, so whenever the tools service mounted afterwards the `instance_*` tools were silently skipped. The lookup now retries on the cordis `internal/service` signal; the service stays optional, because injecting it would park the row in `PENDING` (a boot-audit failure) on compositions that have no tools service.
+- The panel no longer disappears silently when the `slots` service is not ready at `apply` time: the client half waits through `ctx.inject(['slots'], …)` instead of probing once and returning.
+- `$DSH_HOME` now resolves with the harness's own precedence (non-blank wins, blank is unset, `~` expands) and no longer requires the directory to exist. Previously a first run against a fresh `$DSH_HOME` fell back to `~/.dsh`, splitting the instance registry and launcher logs away from the instance being managed.
+
+### Changed
+
+- `stop-self` is POST-only now, like every other mutating action; a GET answers 405. It tolerated GET solely because ≤0.4.1 peers forwarded stops that way.
+
+### Removed
+
+- **Breaking:** the pre-rename `/dsh-easy-port-manager/api` alias, together with every ≤0.4.1 compatibility path behind it — the legacy self-report probe in `action=list` and the GET fallback when forwarding a stop. An instance still running ≤0.4.1 can no longer be discovered or stopped by this version, nor discover or stop one; instances from 0.5.0 onward are unaffected. Check the panel's version-skew badge before upgrading a fleet that may still hold an old instance.
 
 ## 0.8.0 - 2026-08-27
 

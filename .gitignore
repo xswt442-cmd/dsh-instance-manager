@@ -4,3 +4,4 @@ test-*
 test1.*
 .DS_Store
 testplace/
+.workbuddy

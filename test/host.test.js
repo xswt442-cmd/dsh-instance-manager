@@ -12,9 +12,9 @@ import {
   hostHostname,
   createGuard,
   resolveDshBin,
+  resolveDshHome,
   registryDir,
   isValidRegistryEntry,
-  firstNonNull,
   tailFile,
   unionPorts,
   summarizeSessions,
@@ -188,21 +188,6 @@ test('registry entries validate structurally and by freshness', () => {
   }
 })
 
-test('firstNonNull resolves the first fulfilled non-null value', async () => {
-  assert.equal(await firstNonNull([async () => null, async () => 'b']), 'b')
-  assert.equal(await firstNonNull([async () => { throw new Error('x') }, async () => 7]), 7)
-})
-
-test('firstNonNull resolves null when everything misses or rejects', async () => {
-  const slowNull = () => new Promise((resolve) => setTimeout(() => resolve(null), 5))
-  assert.equal(await firstNonNull([
-    async () => { throw new Error('x') },
-    async () => null,
-    slowNull
-  ]), null)
-  assert.equal(await firstNonNull([]), null)
-})
-
 test('unionPorts merges the sweep range with out-of-range heartbeat ports', () => {
   assert.deepEqual(unionPorts(3080, 3082), [3080, 3081, 3082])
   assert.deepEqual(
@@ -298,4 +283,23 @@ test('tailFile returns whole lines only, bounded by maxLines and maxBytes', asyn
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('resolveDshHome follows the harness precedence and treats blank as unset', () => {
+  const home = '/home/tester'
+  const fallback = path.resolve(path.join(home, '.dsh'))
+  assert.equal(resolveDshHome({ DSH_HOME: '/srv/dsh' }, home), path.resolve('/srv/dsh'))
+  assert.equal(resolveDshHome({}, home), fallback)
+  assert.equal(resolveDshHome({ DSH_HOME: '' }, home), fallback)
+  assert.equal(resolveDshHome({ DSH_HOME: '   ' }, home), fallback)
+  // A configured home that does not exist yet is still the home: the harness
+  // creates it on demand, and falling back here would split the registry.
+  assert.equal(resolveDshHome({ DSH_HOME: '/not/created/yet' }, home), path.resolve('/not/created/yet'))
+})
+
+test('resolveDshHome expands a tilde prefix against the OS home', () => {
+  const home = '/home/tester'
+  assert.equal(resolveDshHome({ DSH_HOME: '~' }, home), path.resolve(home))
+  assert.equal(resolveDshHome({ DSH_HOME: '~/elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
+  assert.equal(resolveDshHome({ DSH_HOME: '~\\elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
 })

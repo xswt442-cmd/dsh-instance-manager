@@ -6,20 +6,17 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-在 DSH Web 侧边栏添加管理面板:列出本机 3080–3129 端口上的全部 dsh web 实例,支持启动、优雅停止与详情查看。
+DSH Web 实例管理插件，入口在共享工具坞（createhelper utility dock，与 dsh-treekeeper 等共用托盘，位置可在坞上切换并记忆）。列出本机端口段内的全部 dsh web 实例，支持详情查看、优雅停止、启动新实例；配置配对后可查看远程实例（≥0.9）。
 
 ## 功能
 
-- **实例列表**:端口(可点击)/ PID / 运行时长 / 会话数 / 内存;4 秒自动刷新,后台标签页暂停
-- **版本标注**:托管实例自报插件版本,与当前实例不同则标「版本差异」
-- **实例详情**:点击行展开抽屉——启动时间、内存走势、stdout/stderr 日志尾随(最近 200 行)
-- **启停控制**:一键拉起新实例;优雅停止任意实例(`appExit`,会话落盘);停止当前实例与全部结束需二次确认
-- **中英切换**:面板头部「EN / 中」,偏好存 localStorage
-- **Agent 工具**:向会话内模型注册 `instance_list / instance_start / instance_stop / instance_logs / instance_sessions`,agent 可直接查看与启停实例(工具拒绝停止当前实例)
-- **上下线提醒**:托管实例上/下线时右下角即时 toast(SSE 推送,面板关着也生效)
-- **会话概要**:抽屉内查看任意托管实例的活跃会话(时间 / 目录 / 子代理 / 活动量)
-
-除「启动新实例」外全程不产生子进程。
+- **实例列表**：端口 / PID / 运行时长 / 会话数 / 内存；4s 自动刷新（后台标签页暂停）；插件版本不一致标「版本差异」
+- **实例详情**：抽屉查看启动时间、内存走势、stdout/stderr 日志（200 行）、活跃会话概要
+- **启停控制**：启动新实例（等待自报就绪，返回 pid）；优雅停止任意实例（`appExit`，会话落盘）；停止当前实例与全部结束需二次确认
+- **跨机舰队（≥0.9）**：配置 peer 后，面板合并远程实例列表，抽屉可查远程会话与日志
+- **Agent 工具**：`instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`
+- **上下线提醒**：实例与 peer 状态变化经 SSE 即时 toast
+- **中英切换**：偏好存 localStorage
 
 ## 安装
 
@@ -29,53 +26,70 @@ dsh plugin --profile web add dsh-instance-manager
 dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 ```
 
-安装后重启 DSH Web 生效。卸载:`dsh plugin --profile web remove dsh-instance-manager`。
+安装后重启 DSH Web 生效。
 
 ## 工作原理
 
-主机端注册 JSON 路由 `/dsh-instance-manager/api`(旧路径 `/dsh-easy-port-manager/api` 以别名保留):
+主机端注册 `/dsh-instance-manager/api`（0.9 起移除 pre-rename 别名 `/dsh-easy-port-manager/api`）：
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
-| `list` | GET | 先读心跳注册表(10s 心跳 / 30s 有效)并复核(含超出扫描范围的心跳端口),未覆盖端口再走 self 探测与页面标记 |
-| `self` | GET | 自报 `{ pid, port, startedAt, sessions, rss, version }` |
-| `logs&port=&stream=out\|err` | GET | 尾读共享日志 `server-<port>.*.log`(≤64KB / 200 行) |
-| `sessions&port=` | GET | 目标实例的活跃会话概要(仅标量字段,最近 20 条);缺省 port 即自报 |
-| `GET /dsh-instance-manager/events` | GET | SSE 舰队上/下线推送(baseline 首帧 + 差分帧) |
-| `start` | POST | 第一个空闲端口拉起新实例(detached 后台),等待其自报就绪后返回 `{ ok, port, pid }`;端口竞态失败自动换口重试一次 |
-| `stop&port=` | POST | 自己 → `appExit` 优雅退出;否则向目标转发 `stop-self` |
-| `stop-all` | POST | 并行转发停止全部托管实例,最后自身退出 |
-| `stop-self` | POST | 自身优雅退出(GET 容忍,兼容 ≤0.4.1 转发) |
+| `list` | GET | 心跳注册表优先（10s 写 / 30s 有效）并复核，未覆盖端口走探测；配置 peer 时合并远程舰队 |
+| `self` | GET | `{ pid, port, startedAt, sessions, rss, version, fleetId }` |
+| `logs&port=&stream=` | GET | 尾读共享 launcher 日志（≤64KB / 200 行）；`peer=` 经舰队链路读取 |
+| `sessions&port=` | GET | 目标实例活跃会话概要（标量字段，最近 20 条）；`peer=` 经舰队链路读取 |
+| `start` | POST | 空闲端口拉起新实例（detached），等自报就绪返回 `{ ok, port, pid }`；端口竞态换口重试一次 |
+| `stop&port=` | POST | 本机 → `appExit`；其他 → 转发 `stop-self` |
+| `stop-all` | POST | 并行转发停止全部托管实例（不含远程行），最后自身退出 |
+| `stop-self` | POST | 自身优雅退出（GET 一律 405） |
+| `GET /events` | GET | SSE：实例上/下线与 peer 状态推送 |
+| `WS /link` | WS | 舰队链路：Bearer 认证（fail-closed），query：`ping` / `fleet` / `sessions` / `logs` |
 
-## 端口段与自适应
+## 端口段
 
-扫描/启动默认 **3080–3129**(与 dsh 文档约定一致)。调研结论:该区间只是约定,不是运行时契约——dsh 的 webserver 端口来自组合期配置,甚至支持 `0`(OS 随机分配),源码中并无硬编码。因此:
+- 默认扫描/启动 3080–3129，`DSHIM_PORT_RANGE="4000-4010"` 可覆盖
+- 发现基于心跳注册表（端口校验 1–65535），不依赖端口段；段外实例同样可列出与操作
 
-- 环境变量 `DSHIM_PORT_RANGE="4000-4010"` 可整体覆盖扫描与启动区间
-- **发现不依赖区间**:心跳注册表校验 1–65535,范围外手动启动的实例同样会被列出、停止、查日志与会话
-- 面板启动的子进程带 `--no-open`,不会自动弹浏览器;启动确认窗最长 25 秒,慢首启(如会话日志回填)不会被误报为失败;确认窗内进程退出会在其 launcher 日志留下退出码面包屑
+## 舰队配对（≥0.9）
+
+```powershell
+setx DSHIM_FLEET_TOKEN "足够长的随机串"        # 双方一致
+setx DSHIM_PEERS "office@http://192.168.1.20:3080"
+```
+
+- 重启后面板合并 peer 实例（`@id` 徽章），抽屉可查远程会话与日志；`instance_sessions` / `instance_logs` 支持 `peer=`
+- `action=list` 的 `peers` 字段报告 `online` / `unreachable` / `timeout`
+- 无 token 时链路一律 403（fail-closed）
 
 ## 安全模型
 
-API 仅面向本机面板。回环地址不受混合内容拦截、缺 CORS 也只是不给读响应,因此所有动作经过统一守卫:
+API 仅面向本机面板，所有动作经统一守卫：
 
-- 变更类动作仅接受 POST(`stop-self` 容忍 GET,兼容旧实例间转发)
-- Fetch Metadata:`sec-fetch-site` 非 same-origin / none → 403
-- `Origin` 非本实例回环同源 → 403;`Host` 非回环名 → 403(顺带封 DNS rebinding)
+- 变更类动作仅接受 POST（含 `stop-self`）
+- Fetch Metadata：`sec-fetch-site` 非 same-origin / none → 403
+- `Origin` 非本实例回环同源 → 403；`Host` 非回环名 → 403（同时封 DNS rebinding）
+- 非回环请求需 `Authorization: Bearer <token>`（constant-time 比较；未配置即拒绝）
+- **token 无动作分级**：持 token 的 peer 可调用本机全部动作（`start` 拉起进程、`stop` / `stop-all` 结束本机实例、`sessions` 读会话工作目录），应视为本机的可信操作方，而非只读观察者。想只读就配置 peer，直接打开对方面板页面
+- SSE `/events` 不向远程开放（EventSource 无法携带自定义请求头）
+- 已在本地运行的恶意进程可直接结束任意进程，不在威胁模型内
 
-已在本地运行的恶意进程可直接结束任意进程,不在威胁模型内。
+## 开发与部署
+
+- 运行中的实例**不要**以符号链接挂载本仓库：文件变动触发 HMR 热重载，多文件编辑的中间态可能拖垮实例
+- 部署快照（软链 → 真实目录副本）：`powershell -File scripts\deploy-profile.ps1`，然后重启实例
 
 ## 结构
 
 ```
 package.json       npm 元数据 + dsh.bundle.patch + dsh.client 声明
-cordis.patch.yml   向 profile 插入本插件 loader 行
-lib/index.js       host:注册 /dsh-instance-manager/api JSON 路由
-lib/agent-tools.js host:instance_* 模型工具(tools 服务)
-lib/client.js      client:侧边栏入口 + 浮动面板(ModuleLoader bundle)
-lib/shared.js      host 纯函数(请求守卫 / bin 解析 / 注册表校验)
-test/              node:test 单元测试(npm test)
-CHANGELOG.md       变更记录
+cordis.patch.yml   向 profile 插入 loader 行
+lib/index.js       host：API / SSE / 舰队链路注册
+lib/fleet.js       host：peer 链路（拨号 / 重连 / query 帧）
+lib/agent-tools.js host：instance_* 模型工具
+lib/client.js      client：工具坞入口 + 面板
+lib/shared.js      host 纯函数（守卫 / 注册表 / 会话概要）
+scripts/           部署等开发脚本
+test/              node:test 单元测试（npm test）
 ```
 
 ## License
