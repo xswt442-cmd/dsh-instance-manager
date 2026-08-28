@@ -36,7 +36,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 ## 工作原理
 
-主机端注册 JSON 路由 `/dsh-instance-manager/api`(旧路径 `/dsh-easy-port-manager/api` 以别名保留):
+主机端注册 JSON 路由 `/dsh-instance-manager/api`:
 
 | 动作 | 方法 | 说明 |
 |---|---|---|
@@ -48,7 +48,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 | `start` | POST | 第一个空闲端口拉起新实例(detached 后台),等待其自报就绪后返回 `{ ok, port, pid }`;端口竞态失败自动换口重试一次 |
 | `stop&port=` | POST | 自己 → `appExit` 优雅退出;否则向目标转发 `stop-self` |
 | `stop-all` | POST | 并行转发停止全部托管实例,最后自身退出 |
-| `stop-self` | POST | 自身优雅退出(GET 容忍,兼容 ≤0.4.1 转发) |
+| `stop-self` | POST | 自身优雅退出(同样仅接受 POST) |
 
 ## 端口段与自适应
 
@@ -62,11 +62,25 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 API 仅面向本机面板。回环地址不受混合内容拦截、缺 CORS 也只是不给读响应,因此所有动作经过统一守卫:
 
-- 变更类动作仅接受 POST(`stop-self` 容忍 GET,兼容旧实例间转发)
+- 变更类动作仅接受 POST(含 `stop-self`,GET 一律 405)
 - Fetch Metadata:`sec-fetch-site` 非 same-origin / none → 403
 - `Origin` 非本实例回环同源 → 403;`Host` 非回环名 → 403(顺带封 DNS rebinding)
 
 已在本地运行的恶意进程可直接结束任意进程,不在威胁模型内。
+
+### 远程舰队:把某台机器配成 peer = 把本机控制权交给它
+
+回环之外的请求(非回环 `Host`)还需要舰队令牌 `Authorization: Bearer`,令牌来自 `DSHIM_FLEET_TOKEN`
+或 `DSHIM_FLEET_TOKEN_REF` 指向的凭据服务,每请求解析、未配置即 fail-closed。
+但**令牌不做动作分级**:它是一个对称预共享密钥,持有者可以调用本机的每一个动作,包括
+
+- `start` —— 在你机器上拉起新进程
+- `stop` / `stop-all` —— 结束本机的 dsh 实例(包括当前这个)
+- `sessions` —— 读取会话的工作目录路径与其他标量字段
+
+所以 `DSHIM_PEERS` 里的每一台机器都应视为**本机的可信操作方**,不是"只读观察者"。
+没有"只让对方看列表"这种配置:想只读,就别配 peer,直接打开对方的面板页面。
+SSE `/events` 不做远程开放(EventSource 发不出自定义请求头),远程对端拿不到实时上下线推送。
 
 ## 结构
 

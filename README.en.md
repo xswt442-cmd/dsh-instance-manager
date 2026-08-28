@@ -36,7 +36,7 @@ Restart DSH Web afterwards. Uninstall: `dsh plugin --profile web remove dsh-inst
 
 ## How it works
 
-The host half registers the JSON route `/dsh-instance-manager/api` (the pre-rename `/dsh-easy-port-manager/api` path stays as an alias):
+The host half registers the JSON route `/dsh-instance-manager/api`:
 
 | Action | Method | Description |
 |---|---|---|
@@ -48,7 +48,7 @@ The host half registers the JSON route `/dsh-instance-manager/api` (the pre-rena
 | `start` | POST | Launches a new instance on the first free port (detached background) and holds the reply until it answers `self`, returning `{ ok, port, pid }`; a lost port race retries once on the next free port |
 | `stop&port=` | POST | Self → `appExit`; otherwise forwards `stop-self` to the target |
 | `stop-all` | POST | Forwards stops in parallel, then exits itself |
-| `stop-self` | POST | Graceful self-shutdown (GET tolerated for ≤0.4.1 peer forwarding) |
+| `stop-self` | POST | Graceful self-shutdown (POST only, like every other mutating action) |
 
 ## Port band and adaptability
 
@@ -62,11 +62,28 @@ Sweep/start default to **3080–3129** (matching dsh's documented convention). R
 
 The API serves the local panel only. Loopback is exempt from mixed-content blocking and missing CORS only hides responses, so every action passes a shared guard:
 
-- Mutating actions require POST (`stop-self` tolerates GET for legacy peer forwarding)
+- Mutating actions require POST, `stop-self` included (a GET gets 405)
 - Fetch Metadata: `sec-fetch-site` outside same-origin / none → 403
 - Foreign `Origin` → 403; non-loopback `Host` → 403 (also defeats DNS rebinding)
 
 A malicious process already running locally can kill processes directly and is out of scope for this threat model.
+
+### Remote fleet: configuring a peer grants it control of this machine
+
+Requests from outside loopback (a non-loopback `Host`) additionally need the fleet bearer —
+`Authorization: Bearer`, resolved per request from `DSHIM_FLEET_TOKEN` or from whatever
+`DSHIM_FLEET_TOKEN_REF` points at, failing closed when unconfigured. **The token carries no
+action-level scoping**: it is a symmetric pre-shared key, and a peer holding it can call every
+action on this machine, including
+
+- `start` — spawning new processes here
+- `stop` / `stop-all` — shutting down local dsh instances, this one included
+- `sessions` — reading session working directories and the other scalar fields
+
+Treat every machine in `DSHIM_PEERS` as a trusted operator of this host, not a read-only observer.
+There is no "let them only see the list" setting — for read-only access, open the other machine's
+panel in a browser instead of peering. SSE `/events` is not exposed remotely (EventSource cannot
+send custom headers), so remote peers get no live up/down push.
 
 ## Structure
 
