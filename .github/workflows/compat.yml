@@ -110,8 +110,10 @@ jobs:
           if (-not $ready) { Write-Error "dsh web did not become ready" }
           $api = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" -UseBasicParsing -TimeoutSec 5
           if ($api.Content -notmatch '"items"') { Write-Error "manager api returned unexpected payload" }
-          $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" -UseBasicParsing -TimeoutSec 5
-          if ($legacy.Content -notmatch '"pid"') { Write-Error "legacy alias route not answered" }
+          # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
+          # re-introduction fails the build instead of silently shipping
+          $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" -UseBasicParsing -TimeoutSec 5 -SkipHttpErrorCheck
+          if ($legacy.StatusCode -ne 404) { Write-Error "legacy alias route should be gone, answered $($legacy.StatusCode)" }
           $client = Invoke-WebRequest -Uri "http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js" -UseBasicParsing -TimeoutSec 5
           if ($client.StatusCode -ne 200) { Write-Error "client bundle not served" }
           # --- request-guard regression checks (see README 安全模型) ---
@@ -166,8 +168,10 @@ jobs:
           fi
           curl -s --noproxy '*' "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
             || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }
-          curl -s --noproxy '*' "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" | grep -q '"pid"' \
-            || { echo "::error::legacy alias route not answered"; kill "$pid" 2>/dev/null; exit 1; }
+          # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
+          # re-introduction fails the build instead of silently shipping
+          [ "$(code "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self")" = "404" ] \
+            || { echo "::error::legacy alias route should be gone, did not answer 404"; kill "$pid" 2>/dev/null; exit 1; }
           [ "$(code http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js)" = "200" ] \
             || { echo "::error::client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
           # --- request-guard regression checks (see README 安全模型) ---
