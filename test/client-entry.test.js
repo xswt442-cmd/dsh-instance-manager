@@ -51,13 +51,20 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
       registered.push({ options, render })
     }
   }
+  let injected = null
   plugin.apply({
-    get(name) {
-      assert.equal(name, 'slots')
-      return slots
+    // The plugin must not probe `slots` with a one-shot get: a miss used to
+    // leave the panel silently absent. It waits through ctx.inject instead.
+    inject(names, mount) {
+      injected = names
+      mount({ slots, on() {} })
     },
     on() {}
   })
+  // Compared element-wise: `injected` is created inside the vm sandbox, so its
+  // Array prototype is not reference-equal to this realm's.
+  assert.equal(Array.isArray(injected), true)
+  assert.deepEqual(Array.from(injected), ['slots'])
 
   assert.deepEqual(registered.map(entry => entry.options.id), [
     'instance-manager-panel',
