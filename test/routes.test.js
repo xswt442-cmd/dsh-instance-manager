@@ -12,6 +12,9 @@
 // stays undefined so the heartbeat registry file is never written.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import plugin from '../lib/index.js'
 
 const API_PATH = '/dsh-instance-manager/api'
@@ -92,6 +95,41 @@ test('disposal releases every route, upgrade included', () => {
   dispose()
   assert.equal(routes.length, 0)
   assert.equal(upgrades.length, 0)
+})
+
+test('the fatal handler records the breadcrumb without pre-empting the harness exit', () => {
+  // The harness registers its own unhandledRejection listener before any
+  // plugin mounts, and awaits a release (dispose + flush) before exiting.
+  // Node calls listeners in registration order, so this plugin exiting
+  // unconditionally would truncate that release mid-flight.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-crash-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const harnessListener = () => {}
+  process.on('unhandledRejection', harnessListener)
+  const { dispose } = mount()
+  try {
+    const mine = process.listeners('unhandledRejection').at(-1)
+    const originalExit = process.exit
+    let exits = 0
+    process.exit = () => { exits += 1 }
+    try {
+      mine(new Error('boom'))
+    } finally {
+      process.exit = originalExit
+    }
+    assert.equal(exits, 0, 'the harness owns the fatal exit; the plugin must not pre-empt it')
+    assert.ok(
+      fs.existsSync(path.join(home, 'launcher', 'logs', 'dshim-crash.log')),
+      'the breadcrumb is still written before the exit decision'
+    )
+  } finally {
+    dispose()
+    process.off('unhandledRejection', harnessListener)
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })
 
 test('disposal releases the process fatal-path hooks', () => {
