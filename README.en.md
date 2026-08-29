@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-A DeepSeek Harness (DSH) web plugin launched from the shared createhelper utility dock (a page-level tray shared with dsh-treekeeper; placement switchable and remembered). Lists every dsh web instance in the managed port band, with details, graceful stop and one-click launch; with pairing configured it can also inspect remote instances (>= 0.9).
+DSH Web Instance Management Plugin. Uses the shared tool dock as the entry point. Lists all DSH Web instances within the local port range, with support for viewing instance details, stopping instances, and launching new ones. Once pairing is configured, remote instances can also be viewed.
 
 ## Features
 
