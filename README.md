@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-DSH Web 实例管理插件，入口在共享工具坞（createhelper utility dock，与 dsh-treekeeper 等共用托盘，位置可在坞上切换并记忆）。列出本机端口段内的全部 dsh web 实例，支持详情查看、优雅停止、启动新实例；配置配对后可查看远程实例（≥0.9）。
+DSH Web 实例管理插件，设置共享工具坞作为入口。列出本机端口段内的全部 dsh web 实例，支持详情查看、停止、启动新实例；配置配对后可查看远程实例。
 
 ## 功能
 
