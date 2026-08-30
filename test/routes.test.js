@@ -219,6 +219,19 @@ test('action=logs refuses a missing port, and reads a valid one', async () => {
   }
 })
 
+test('action=sessions refuses a present-but-invalid port, allows an absent one', async () => {
+  // Absent means "this instance", so it must stay legal — only a value the
+  // caller actually supplied gets rejected, otherwise a typo would silently
+  // answer with the wrong instance.
+  const bad = await callApi('action=sessions&port=' + encodeURIComponent(TRAVERSAL))
+  assert.equal(bad.status, 400)
+  assert.equal(bad.json.code, 'no_port')
+
+  const self = await callApi('action=sessions')
+  assert.equal(self.status, 200, 'an omitted port means this instance, not a bad request')
+  assert.equal(self.json.ok, true)
+})
+
 test('disposal releases the process fatal-path hooks', () => {
   const before = process.listenerCount('uncaughtException')
   const beforeRejection = process.listenerCount('unhandledRejection')

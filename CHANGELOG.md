@@ -3,6 +3,18 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Fixed
+
+- **Peer-supplied log ports are validated.** The F3 `logs` query kind interpolated the port straight into `$DSH_HOME/launcher/logs/server-<port>.<stream>.log`, so a peer sending `{kind:'logs', port:'../../../../Windows/win.ini'}` could read a file outside the log directory. The local HTTP route validated the same value but the peer branch skipped the check. All port input now goes through one `normalizePort` gate (integer in `[1, 65535]`, digits only — no `1e3`, `0x10`, `+80`, `80.5`), enforced inside `logsFor` / `readLogsFor` so every caller shares it, with `instance_logs` rejecting before the value can be forwarded to a peer at all.
+- **The F3 `sessions` query kind answers the port that was asked about.** It called `describeSessions()` directly and ignored `q.port`, so asking a peer for `:3090` silently returned that peer's *own* session summary instead of `:3090`'s — wrong data rather than an error, invisible from the panel. Both F3 kinds now delegate to the same `sessionsFor` / `logsFor` the local HTTP route and the agent tools use, so a peer can no longer reach a code path the panel itself would refuse.
+- `action=sessions` and `action=logs` no longer keep a second, separate copy of the port check in the route handler; the handler derives its 400 from the helper's `no_port` code. The duplicate would have let the shared gate regress without any test noticing.
+
+### Changed
+
+- `action=sessions&port=0` now answers 400 (`no_port`) instead of quietly falling back to this instance's own sessions; an omitted or empty port still means "this instance".
+
 ## 0.9.0 - 2026-08-27
 
 ### Added
