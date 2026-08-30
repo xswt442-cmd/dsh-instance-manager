@@ -167,6 +167,58 @@ test('the fatal handler records the breadcrumb without pre-empting the harness e
   }
 })
 
+// ---- action=logs / action=sessions port handling -------------------------
+// The peer link answers these same two kinds by delegating to the functions
+// exercised here, so a rejection proven on the HTTP path is a rejection on
+// the fleet path too (see test/fleet.test.js for the delegation itself).
+const TRAVERSAL = '../'.repeat(8) + 'Windows/win.ini'
+
+const callApi = async (query) => {
+  const { routes, dispose } = mount()
+  try {
+    const route = routes.find((r) => r.path === API_PATH)
+    let status = 0
+    let body = ''
+    const res = {
+      writeHead: (code) => { status = code },
+      end: (chunk) => { body = chunk }
+    }
+    // Loopback Host with no Origin / Sec-Fetch-Site: the guard's happy path.
+    await route.handler({ url: API_PATH + '?' + query, method: 'GET', headers: { host: '127.0.0.1' } }, res)
+    return { status, json: body ? JSON.parse(body) : null }
+  } finally {
+    dispose()
+  }
+}
+
+test('action=logs refuses a port that is not an integer in range', async () => {
+  // The port is interpolated into $DSH_HOME/launcher/logs/server-<port>.*.log,
+  // so a traversal string here was a real file-read primitive.
+  for (const bad of [TRAVERSAL, '80.5', '1e3', '0', '65536', 'abc', '']) {
+    const r = await callApi('action=logs&port=' + encodeURIComponent(bad))
+    assert.equal(r.status, 400, 'port=' + bad)
+    assert.equal(r.json.code, 'no_port')
+  }
+})
+
+test('action=logs refuses a missing port, and reads a valid one', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-logs-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    assert.equal((await callApi('action=logs')).status, 400, 'logs has no "self" default')
+    const ok = await callApi('action=logs&port=3080')
+    assert.equal(ok.status, 200)
+    assert.deepEqual(ok.json, { ok: true, port: 3080, stream: 'out', exists: false, truncated: false, lines: [] })
+    const err = await callApi('action=logs&port=3080&stream=err')
+    assert.equal(err.json.stream, 'err')
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('disposal releases the process fatal-path hooks', () => {
   const before = process.listenerCount('uncaughtException')
   const beforeRejection = process.listenerCount('unhandledRejection')

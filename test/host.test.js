@@ -15,6 +15,7 @@ import {
   resolveDshHome,
   registryDir,
   isValidRegistryEntry,
+  normalizePort,
   tailFile,
   unionPorts,
   summarizeSessions,
@@ -158,6 +159,35 @@ test('resolveDshBin falls back to the profile path built with path.join', () => 
 
 test('resolveDshBin resolves empty when neither candidate exists', () => {
   assert.equal(resolveDshBin({ argv1: '', home: '/h', exists: () => false }), '')
+})
+
+// The port is interpolated into the launcher log filename, so this function
+// is the only thing standing between a fleet peer and a path traversal.
+test('normalizePort accepts exactly the integers in [1, 65535]', () => {
+  assert.equal(normalizePort(1), 1)
+  assert.equal(normalizePort(3080), 3080)
+  assert.equal(normalizePort(65535), 65535)
+  assert.equal(normalizePort('3080'), 3080)
+  assert.equal(normalizePort(' 3080 '), 3080)
+})
+
+test('normalizePort rejects everything that is not a bare integer in range', () => {
+  // Path traversal — the reason this function exists.
+  for (const bad of [
+    '../'.repeat(8) + 'Windows/win.ini',
+    '..\\..\\..\\..\\secret',
+    '../../etc/passwd'
+  ]) {
+    assert.equal(normalizePort(bad), null, bad)
+  }
+  // Non-integers, out-of-range, and coercions that only "look" numeric.
+  for (const bad of [
+    0, -1, 65536, 80.5, NaN, Infinity, -Infinity,
+    '', '   ', '80abc', 'abc', '1e3', '0x10', '+80',
+    null, undefined, true, false, {}, [], ['80']
+  ]) {
+    assert.equal(normalizePort(bad), null, JSON.stringify(bad))
+  }
 })
 
 test('registryDir nests run/instances under the dsh home', () => {
