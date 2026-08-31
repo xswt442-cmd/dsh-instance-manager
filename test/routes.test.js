@@ -173,7 +173,7 @@ test('the fatal handler records the breadcrumb without pre-empting the harness e
 // the fleet path too (see test/fleet.test.js for the delegation itself).
 const TRAVERSAL = '../'.repeat(8) + 'Windows/win.ini'
 
-const callApi = async (query) => {
+const callApi = async (query, method = 'GET') => {
   const { routes, dispose } = mount()
   try {
     const route = routes.find((r) => r.path === API_PATH)
@@ -184,7 +184,7 @@ const callApi = async (query) => {
       end: (chunk) => { body = chunk }
     }
     // Loopback Host with no Origin / Sec-Fetch-Site: the guard's happy path.
-    await route.handler({ url: API_PATH + '?' + query, method: 'GET', headers: { host: '127.0.0.1' } }, res)
+    await route.handler({ url: API_PATH + '?' + query, method, headers: { host: '127.0.0.1' } }, res)
     return { status, json: body ? JSON.parse(body) : null }
   } finally {
     dispose()
@@ -270,6 +270,31 @@ test('action=sessions refuses a present-but-invalid port, allows an absent one',
   const self = await callApi('action=sessions')
   assert.equal(self.status, 200, 'an omitted port means this instance, not a bad request')
   assert.equal(self.json.ok, true)
+})
+
+// The stop action forwards stop-self to the target port, so what counts as a
+// port has to be exactly what logs/sessions accept. It used to parse with
+// Number(), which reads '1e3' as 1000, '0x10' as 16 and '+80' as 80 — three
+// ports stop would happily forward to that logs rejects with a 400 — while a
+// fractional or negative value reached http.get and threw
+// ERR_SOCKET_BAD_PORT out of the handler, turning a bad request into a 500.
+test('action=stop parses the port with the same rule as logs and sessions', async () => {
+  for (const bad of [TRAVERSAL, '1e3', '0x10', '80.5', '-1', '+80', '0', '65536', 'abc', '']) {
+    const r = await callApi('action=stop&port=' + encodeURIComponent(bad), 'POST')
+    assert.equal(r.status, 400, 'port=' + bad)
+    assert.equal(r.json.code, 'no_port', 'port=' + bad)
+  }
+  // Omitted entirely is the same bad request, never "stop something".
+  const none = await callApi('action=stop', 'POST')
+  assert.equal(none.status, 400)
+  assert.equal(none.json.code, 'no_port')
+})
+
+test('action=stop still requires POST before it looks at the port', async () => {
+  // The 405 must win: a GET stop must never be parsed, let alone forwarded.
+  const r = await callApi('action=stop&port=1e3', 'GET')
+  assert.equal(r.status, 405)
+  assert.equal(r.json.code, 'need_post')
 })
 
 test('disposal releases the process fatal-path hooks', () => {

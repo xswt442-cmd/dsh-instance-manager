@@ -19,6 +19,8 @@ import {
   tailFile,
   unionPorts,
   summarizeSessions,
+  awaitChild,
+  managedLocalPorts,
   diffManagedPorts,
   parsePortRange,
   safeTokenEqual
@@ -256,6 +258,68 @@ test('summarizeSessions caps at N newest rows', () => {
 })
 
 // ---- fleet up/down diff ---------------------------------------------------
+
+// ---- launcher child: ready / exited / failed-to-spawn --------------------
+// The 'error' case is the one that matters: a ChildProcess that cannot start
+// emits 'error' and NO 'exit', and an unlistened 'error' event is
+// process-fatal, so a single failed launch used to kill the whole instance.
+const fakeChild = () => {
+  const handlers = {}
+  return {
+    once: (ev, fn) => { handlers[ev] = fn; return this },
+    fire: (ev, arg) => { if (handlers[ev]) handlers[ev](arg) }
+  }
+}
+const noSleep = async () => { }
+
+test('awaitChild reports a child that failed to spawn as died, not as a crash', async () => {
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => false })
+  const err = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' })
+  child.fire('error', err)
+  assert.deepEqual(await pending, { died: true, code: 'spawn:ENOENT' },
+    'a spawn failure must surface as a failed launch, never as an unhandled error event')
+})
+
+test('awaitChild reports an exiting child with its exit code', async () => {
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => false })
+  child.fire('exit', 9)
+  assert.deepEqual(await pending, { died: true, code: 9 })
+})
+
+test('awaitChild resolves ready as soon as the child answers', async () => {
+  let calls = 0
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => (++calls >= 2) })
+  assert.deepEqual(await pending, { ready: true })
+  assert.equal(calls, 2, 'polling must stop at the first positive probe')
+})
+
+test('awaitChild returns empty (not died) when the confirm window just closes', async () => {
+  // A slow first boot is not a failure: the caller leaves the child alone
+  // rather than spawning a second one.
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 0, sleep: noSleep, probe: async () => false })
+  assert.deepEqual(await pending, {})
+})
+
+test('managedLocalPorts tracks managed LOCAL rows only', () => {
+  // Regression: the SSE baseline seeded this set with an inline
+  // `i.managed` filter while the diff ticker used `i.managed && !i.remote`,
+  // so the first tick after subscribing read every peer port as "removed"
+  // and toasted instance-down for machines that were up the whole time.
+  // Both call sites now share this helper, so they cannot disagree again.
+  const items = [
+    { port: 3080, managed: true },
+    { port: 3081, managed: true, remote: true, source: 'office' },
+    { port: 3082, managed: false },
+    { port: 3083, managed: true, remote: true, source: 'laptop' }
+  ]
+  assert.deepEqual(managedLocalPorts(items), [3080])
+  assert.deepEqual(managedLocalPorts(null), [], 'a null fleet is not an error')
+  assert.deepEqual(managedLocalPorts(undefined), [])
+})
 
 test('diffManagedPorts reports joins and leaves between ticks', () => {
   assert.deepEqual(
