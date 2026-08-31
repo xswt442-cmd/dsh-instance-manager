@@ -219,6 +219,46 @@ test('action=logs refuses a missing port, and reads a valid one', async () => {
   }
 })
 
+// A `peer` that names nothing configured must be rejected, not silently
+// answered with local data — the same wrong-answer-instead-of-failure shape
+// as the F3 sessions bug.
+test('action=logs rejects an unknown peer instead of falling back to local', async () => {
+  const r = await callApi('action=logs&port=3080&peer=nope')
+  assert.equal(r.status, 400)
+  assert.equal(r.json.code, 'unknown_peer')
+})
+
+test('action=sessions rejects an unknown peer instead of falling back to local', async () => {
+  const r = await callApi('action=sessions&port=3080&peer=nope')
+  assert.equal(r.status, 400)
+  assert.equal(r.json.code, 'unknown_peer')
+})
+
+// Regression: the client bundle stringified an absent `peer` as the literal
+// "undefined", which arrived as a well-formed peer id and routed EVERY local
+// read through the (always-failing) peer path — local logs span on "loading"
+// forever. The sentinel means "no peer", so those clients still read local.
+test('a stringified absent peer is read as no peer, not as a peer named undefined', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-peer-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    for (const sentinel of ['undefined', 'null', '']) {
+      const logs = await callApi('action=logs&port=3080&peer=' + sentinel)
+      assert.equal(logs.status, 200, 'peer=' + sentinel)
+      assert.equal(logs.json.ok, true, 'peer=' + sentinel + ' must not route through a peer')
+
+      const sess = await callApi('action=sessions&peer=' + sentinel)
+      assert.equal(sess.status, 200, 'peer=' + sentinel)
+      assert.equal(sess.json.ok, true, 'peer=' + sentinel + ' must not route through a peer')
+    }
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('action=sessions refuses a present-but-invalid port, allows an absent one', async () => {
   // Absent means "this instance", so it must stay legal — only a value the
   // caller actually supplied gets rejected, otherwise a typo would silently
