@@ -5,9 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ## Unreleased
 
+## 0.9.2 - 2026-08-31
+
 ### Changed
 
 - The `DSH Instance` launcher joins TreeKeeper through a metadata-versioned page-local dock protocol. Registration handles are ownership-safe, so an obsolete HMR disposer cannot remove its replacement; opening one dock panel closes the active sibling panel.
+
+### Fixed
+
+- The panel header now uses `DSH Instance` in both languages, matching its Dock launcher.
 
 ## 0.9.1 - 2026-08-31
 
