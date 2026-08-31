@@ -49,6 +49,7 @@ The host half registers `/dsh-instance-manager/api` (the pre-rename alias `/dsh-
 
 - Sweep/start default to 3080–3129; `DSHIM_PORT_RANGE="4000-4010"` overrides
 - Discovery is heartbeat-driven (ports validated 1–65535) and does not depend on the band; out-of-band instances are still listed and operable
+- Every `port=` parameter (`logs` / `sessions` / `stop`) goes through the same `normalizePort` gate: decimal integers in 1–65535 only. `1e3`, `0x10`, `+80`, `80.5` and `-1` are all 400 `no_port` — the port is interpolated into a launcher log filename, so it refuses rather than guesses
 
 ## Fleet pairing (>= 0.9)
 
@@ -59,6 +60,7 @@ setx DSHIM_PEERS "office@http://192.168.1.20:3080"
 
 - After a restart the panel merges peer instances (badged `@id`); the drawer reads remote sessions and logs; `instance_sessions` / `instance_logs` accept `peer=`
 - `action=list` reports each peer's status in `peers`: `online` / `unreachable` / `timeout`
+- Peering is per-direction, so two machines that should see each other list each other in `DSHIM_PEERS` — that is the supported shape (a `fleet` query is answered from local rows only and never re-queries a peer)
 - Without a token the link always answers 403 (fail-closed)
 
 ## Security model

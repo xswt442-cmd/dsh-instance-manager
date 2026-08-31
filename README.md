@@ -49,6 +49,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 - 默认扫描/启动 3080–3129，`DSHIM_PORT_RANGE="4000-4010"` 可覆盖
 - 发现基于心跳注册表（端口校验 1–65535），不依赖端口段；段外实例同样可列出与操作
+- 所有 `port=` 参数（`logs` / `sessions` / `stop`）走同一条 `normalizePort` 校验：只接受 1–65535 的十进制整数。`1e3`、`0x10`、`+80`、`80.5`、`-1` 一律 400 `no_port` —— 端口会被拼进 launcher 日志文件名，宁可拒也不猜
 
 ## 舰队配对（≥0.9）
 
@@ -59,6 +60,7 @@ setx DSHIM_PEERS "office@http://192.168.1.20:3080"
 
 - 重启后面板合并 peer 实例（`@id` 徽章），抽屉可查远程会话与日志；`instance_sessions` / `instance_logs` 支持 `peer=`
 - `action=list` 的 `peers` 字段报告 `online` / `unreachable` / `timeout`
+- 配对是单向配置的，两台机器互相可见就是各自把对方写进 `DSHIM_PEERS` —— 这是受支持的形态（`fleet` 查询只用本地行作答，不会再回头问 peer）
 - 无 token 时链路一律 403（fail-closed）
 
 ## 安全模型

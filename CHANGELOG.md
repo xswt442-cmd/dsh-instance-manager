@@ -3,10 +3,14 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## Unreleased
+## 0.9.1 - 2026-08-31
 
 ### Fixed
 
+- **Two instances that peer with each other no longer answer each other forever.** Mutual peering is the natural fleet config, and it was a hang: `A` asks `B` for its fleet, `B` answers by re-listing *its* whole fleet — which asks `A` — which answers by listing again. Measured at 5000 nested listings in 70 ms, every one of them a full 50-port sweep, on both machines, from a single panel refresh, with no depth limit anywhere. The host now answers a peer's `fleet` query from a peer-free `listLocalInstances`, and `FleetLinks` refuses to *issue* a fleet query while it is answering one, so the cycle is broken at the source and again at the transport.
+- **A failed launch no longer takes down the whole instance.** The spawned child had an `exit` listener but no `error` one. A child that cannot start (`ENOENT`, `EACCES`, `EMFILE`) emits `error` and *no* `exit`, and an unlistened `error` event is process-fatal — so one click on "start new instance" during such a window killed the instance serving the click. The wait now lives in `shared.awaitChild`, which always consumes that event and reports the failure as an ordinary `start_failed` (eligible for the existing single retry); a synchronous `spawn()` throw is caught too, and no longer leaks the two log handles it had already opened.
+- **`action=stop` parses its port with the same rule as `logs` and `sessions`.** It used `Number()`, which reads `1e3` as 1000, `0x10` as 16 and `+80` as 80 — three ports `stop` would forward to that `logs` rejects with a 400 — and let fractional or negative values reach `http.get`, which throws `ERR_SOCKET_BAD_PORT` straight out of the handler and turns a bad request into a 500. All three actions now share `normalizePort`.
+- **Opening the panel no longer toasts a fleet-wide "instance down".** The SSE baseline a new subscriber is seeded with filtered `i.managed`, while the diff ticker it is compared against filters `i.managed && !i.remote`. Every peer row therefore read as `removed` on the first tick, announcing as departed machines that had been up the whole time. Both call sites now share `managedLocalPorts`, so they cannot disagree again.
 - **Drawer state is keyed by row, not by port.** Peer rows share the port number space with this machine, so two machines can both be running `:3080`. The expanded flag, the rss history and the log/session buffers were all keyed by port alone, which made such rows share one drawer state (the last load won, and React saw duplicate keys). Rows are now stamped `<source>:<port>` where items enter the panel. This also fixes the poll timer: it is an effect with `[]` deps, so its closure was frozen at first render and resolved the peer id against a `data` that was still `null` — after the initial load, every remote read went to the local instance instead of the peer.
 - **A failed log read says so instead of spinning.** `action=logs` failures were swallowed, leaving `logData` at `null`, which the drawer renders as "loading" forever — an offline peer or a rejected port had no visible failure state. Failures are now recorded as `ok:false`, the way sessions already were.
 - **Every local row's log drawer and session summary was broken in 0.9.0.** The panel sent `peer=undefined` for rows that have no peer: the query-string builder stringified an absent param instead of dropping it, and `String(undefined)` is the literal `"undefined"`, which the host read back as a perfectly well-formed peer id. Every local log and session read was therefore routed through the peer link, which cannot answer it, so logs span on "loading" forever and sessions reported "unavailable". The client now omits absent params, and the host resolves `peer=` against the configured peer table — an unconfigured name is a 400 `unknown_peer` rather than a silent fallback to local data, while the `undefined` / `null` sentinels are read as "no peer" so bundles already cached in the browser keep working without a reload.
@@ -16,9 +20,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ### Changed
 
+- `action=stop` answers 400 `no_port` for anything `normalizePort` rejects (`1e3`, `0x10`, `+80`, `80.5`, `-1`, `0`, `65536`, a traversal string, or an omitted port). A `GET` stop is still 405 before the port is even looked at.
 - `action=sessions&port=0` now answers 400 (`no_port`) instead of quietly falling back to this instance's own sessions; an omitted or empty port still means "this instance".
 - `action=logs` / `action=sessions` answer 400 `unknown_peer` when `peer=` names a peer that is not configured, instead of silently answering with local data.
 - A stop's "did it survive?" re-check no longer counts a peer row on the same port, which used to read as if the local instance was still running.
+
+### Added
+
+- Regression tests for the fleet cycle (two hubs wired over an in-memory socket pair), the shared `managedLocalPorts` filter, the `stop` port rule, and all four `awaitChild` verdicts.
 
 ## 0.9.0 - 2026-08-27
 
