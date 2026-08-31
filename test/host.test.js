@@ -15,9 +15,12 @@ import {
   resolveDshHome,
   registryDir,
   isValidRegistryEntry,
+  normalizePort,
   tailFile,
   unionPorts,
   summarizeSessions,
+  awaitChild,
+  managedLocalPorts,
   diffManagedPorts,
   parsePortRange,
   safeTokenEqual
@@ -160,6 +163,35 @@ test('resolveDshBin resolves empty when neither candidate exists', () => {
   assert.equal(resolveDshBin({ argv1: '', home: '/h', exists: () => false }), '')
 })
 
+// The port is interpolated into the launcher log filename, so this function
+// is the only thing standing between a fleet peer and a path traversal.
+test('normalizePort accepts exactly the integers in [1, 65535]', () => {
+  assert.equal(normalizePort(1), 1)
+  assert.equal(normalizePort(3080), 3080)
+  assert.equal(normalizePort(65535), 65535)
+  assert.equal(normalizePort('3080'), 3080)
+  assert.equal(normalizePort(' 3080 '), 3080)
+})
+
+test('normalizePort rejects everything that is not a bare integer in range', () => {
+  // Path traversal — the reason this function exists.
+  for (const bad of [
+    '../'.repeat(8) + 'Windows/win.ini',
+    '..\\..\\..\\..\\secret',
+    '../../etc/passwd'
+  ]) {
+    assert.equal(normalizePort(bad), null, bad)
+  }
+  // Non-integers, out-of-range, and coercions that only "look" numeric.
+  for (const bad of [
+    0, -1, 65536, 80.5, NaN, Infinity, -Infinity,
+    '', '   ', '80abc', 'abc', '1e3', '0x10', '+80',
+    null, undefined, true, false, {}, [], ['80']
+  ]) {
+    assert.equal(normalizePort(bad), null, JSON.stringify(bad))
+  }
+})
+
 test('registryDir nests run/instances under the dsh home', () => {
   assert.equal(registryDir('/home/.dsh'), path.join('/home/.dsh', 'run', 'instances'))
 })
@@ -226,6 +258,68 @@ test('summarizeSessions caps at N newest rows', () => {
 })
 
 // ---- fleet up/down diff ---------------------------------------------------
+
+// ---- launcher child: ready / exited / failed-to-spawn --------------------
+// The 'error' case is the one that matters: a ChildProcess that cannot start
+// emits 'error' and NO 'exit', and an unlistened 'error' event is
+// process-fatal, so a single failed launch used to kill the whole instance.
+const fakeChild = () => {
+  const handlers = {}
+  return {
+    once: (ev, fn) => { handlers[ev] = fn; return this },
+    fire: (ev, arg) => { if (handlers[ev]) handlers[ev](arg) }
+  }
+}
+const noSleep = async () => { }
+
+test('awaitChild reports a child that failed to spawn as died, not as a crash', async () => {
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => false })
+  const err = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' })
+  child.fire('error', err)
+  assert.deepEqual(await pending, { died: true, code: 'spawn:ENOENT' },
+    'a spawn failure must surface as a failed launch, never as an unhandled error event')
+})
+
+test('awaitChild reports an exiting child with its exit code', async () => {
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => false })
+  child.fire('exit', 9)
+  assert.deepEqual(await pending, { died: true, code: 9 })
+})
+
+test('awaitChild resolves ready as soon as the child answers', async () => {
+  let calls = 0
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 50, sleep: noSleep, probe: async () => (++calls >= 2) })
+  assert.deepEqual(await pending, { ready: true })
+  assert.equal(calls, 2, 'polling must stop at the first positive probe')
+})
+
+test('awaitChild returns empty (not died) when the confirm window just closes', async () => {
+  // A slow first boot is not a failure: the caller leaves the child alone
+  // rather than spawning a second one.
+  const child = fakeChild()
+  const pending = awaitChild({ child, confirmMs: 0, sleep: noSleep, probe: async () => false })
+  assert.deepEqual(await pending, {})
+})
+
+test('managedLocalPorts tracks managed LOCAL rows only', () => {
+  // Regression: the SSE baseline seeded this set with an inline
+  // `i.managed` filter while the diff ticker used `i.managed && !i.remote`,
+  // so the first tick after subscribing read every peer port as "removed"
+  // and toasted instance-down for machines that were up the whole time.
+  // Both call sites now share this helper, so they cannot disagree again.
+  const items = [
+    { port: 3080, managed: true },
+    { port: 3081, managed: true, remote: true, source: 'office' },
+    { port: 3082, managed: false },
+    { port: 3083, managed: true, remote: true, source: 'laptop' }
+  ]
+  assert.deepEqual(managedLocalPorts(items), [3080])
+  assert.deepEqual(managedLocalPorts(null), [], 'a null fleet is not an error')
+  assert.deepEqual(managedLocalPorts(undefined), [])
+})
 
 test('diffManagedPorts reports joins and leaves between ticks', () => {
   assert.deepEqual(

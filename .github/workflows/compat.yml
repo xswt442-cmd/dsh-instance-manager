@@ -125,6 +125,9 @@ jobs:
           if ((ApiCode GET "$b`?action=stop&port=1") -ne '405') { Write-Error 'guard regression: GET stop must be 405' }
           # safe to probe: the 405 is returned before any self-exit is scheduled
           if ((ApiCode GET "$b`?action=stop-self") -ne '405') { Write-Error 'guard regression: GET stop-self must be 405' }
+          # stop parses its port with normalizePort, not Number(): '1e3' must
+          # be rejected as a bad request, never forwarded to port 1000.
+          if ((ApiCode POST "$b`?action=stop&port=1e3") -ne '400') { Write-Error 'guard regression: stop&port=1e3 must be 400' }
           if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'guard regression: foreign Origin must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
@@ -137,6 +140,13 @@ jobs:
           if (-not $selfSess.ok) { Write-Error 'self sessions summary failed' }
           $fwdSess = Invoke-RestMethod -Uri "$b`?action=sessions&port=$($start.port)" -TimeoutSec 20
           if (-not $fwdSess.ok) { Write-Error "forwarded sessions failed: $($fwdSess | ConvertTo-Json -Compress)" }
+          # --- log read: the fresh instance, plus the peer-param rules that
+          # --- silently broke every local read in 0.9.0 (peer=undefined) ---
+          $log = Invoke-RestMethod -Uri "$b`?action=logs&port=$($start.port)" -TimeoutSec 20
+          if (-not $log.ok) { Write-Error "log read failed: $($log | ConvertTo-Json -Compress)" }
+          $sentinel = Invoke-RestMethod -Uri "$b`?action=logs&port=$($start.port)&peer=undefined" -TimeoutSec 20
+          if (-not $sentinel.ok) { Write-Error "peer=undefined must mean no peer: $($sentinel | ConvertTo-Json -Compress)" }
+          if ((ApiCode GET "$b`?action=logs&port=$($start.port)&peer=nope") -ne '400') { Write-Error 'unknown peer must be 400, not a local fallback' }
           # --- SSE endpoint answers as an event stream ---
           $evBase = $b -replace '/api$', ''
           $evReq = [System.Net.WebRequest]::Create("$evBase/events")
@@ -185,6 +195,9 @@ jobs:
           [ "$(code -X GET "$b?action=stop&port=1")" = "405" ] || { echo "::error::guard regression: GET stop must be 405"; exit 1; }
           # safe to probe: the 405 is returned before any self-exit is scheduled
           [ "$(code -X GET "$b?action=stop-self")" = "405" ] || { echo "::error::guard regression: GET stop-self must be 405"; exit 1; }
+          # stop parses its port with normalizePort, not Number(): '1e3' must
+          # be rejected as a bad request, never forwarded to port 1000.
+          [ "$(code -X POST "$b?action=stop&port=1e3")" = "400" ] || { echo "::error::guard regression: stop&port=1e3 must be 400"; kill "$pid" 2>/dev/null || true; exit 1; }
           [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::guard regression: foreign Origin must be 403"; exit 1; }
           [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
           [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
@@ -197,6 +210,11 @@ jobs:
           # --- sessions summary: self + forwarded to the fresh instance ---
           curl -s --noproxy '*' --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          # --- log read: the fresh instance, plus the peer-param rules that
+          # --- silently broke every local read in 0.9.0 (peer=undefined) ---
+          curl -s --noproxy '*' --max-time 20 "$b?action=logs&port=$new_port" | grep -q '"ok":true' || { echo "::error::log read failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' --max-time 20 "$b?action=logs&port=$new_port&peer=undefined" | grep -q '"ok":true' || { echo "::error::peer=undefined must mean no peer"; kill "$pid" 2>/dev/null || true; exit 1; }
+          [ "$(code -X GET "$b?action=logs&port=$new_port&peer=nope")" = "400" ] || { echo "::error::unknown peer must be 400, not a local fallback"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- SSE endpoint answers as an event stream ---
           ev_root="${b%/api}"
           curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true

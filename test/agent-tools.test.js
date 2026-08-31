@@ -111,6 +111,20 @@ test('instance_stop forwards foreign ports and validates its argument', async ()
   assert.deepEqual(calls.stop, [3099], 'invalid ports never reach the api')
 })
 
+test('instance_logs rejects a non-port before it can be forwarded to a peer', async () => {
+  // The host validates too, but the port can leave this machine over the
+  // fleet link, and it is interpolated into a filename on the far side.
+  const { api, calls } = makeApi()
+  const logDef = byName(buildAgentTools(identity, api)).instance_logs
+  for (const bad of [0, -1, 70000, 1.5, '3080', '../'.repeat(8) + 'Windows/win.ini']) {
+    const r = await logDef.execute({ port: bad })
+    assert.equal(r.ok, false, 'port ' + JSON.stringify(bad) + ' must be rejected')
+    assert.equal(r.code, 'bad_port')
+    assert.match(logDef.output.render({ port: bad }, r)[0].text, /logs failed: port must be an integer/)
+  }
+  assert.deepEqual(calls.logs, [], 'invalid ports never reach the api')
+})
+
 test('instance_logs defaults to stdout, honors stream=err, and maps the shape', async () => {
   const { api, calls } = makeApi()
   const logDef = byName(buildAgentTools(identity, api)).instance_logs
