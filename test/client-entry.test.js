@@ -6,21 +6,24 @@ import vm from 'node:vm'
 test('client contributes both DIM surfaces without occupying the sidebar footer', () => {
   let definition = null
   let styleElement = null
+  let dockRoot = null
   const registered = []
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
   const makeElement = () => ({
     style: { setProperty() {} },
     dataset: {},
+    attributes: {},
+    listeners: {},
     children: [],
-    setAttribute() {},
-    addEventListener() {},
+    setAttribute(name, value) { this.attributes[name] = String(value) },
+    addEventListener(name, listener) { this.listeners[name] = listener },
     appendChild(value) { this.children.push(value) },
     replaceChildren() { this.children = [] },
     remove() {}
   })
   const context = {
     document: {
-      body: { appendChild() {} },
+      body: { appendChild(value) { dockRoot = value } },
       documentElement: { dataset: {}, style: { setProperty() {} } },
       head: { appendChild(value) { styleElement = value } },
       createElement: makeElement,
@@ -72,4 +75,23 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   ])
   assert.equal(registered.every(entry => entry.options.name === 'shell.overlay'), true)
   assert.equal(registered.every(entry => typeof entry.render === 'function'), true)
+  const dock = context.window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__
+  assert.equal(dock.protocol, 'createhelper.dsh.utility-dock')
+  assert.equal(dock.version, 1)
+  assert.equal(dockRoot.children[0].title, 'DSH Instance')
+
+  dockRoot.children[0].listeners.click()
+  assert.equal(dockRoot.children[0].attributes['aria-pressed'], 'true')
+  const other = dock.register({ id: 'other-panel', label: 'other', icon: '', onActivate() {} })
+  dockRoot.children.find(child => child.title === 'other').listeners.click()
+  assert.equal(dockRoot.children.find(child => child.title === 'DSH Instance').attributes['aria-pressed'], 'false',
+    'opening another dock item deactivates the active panel')
+  other.dispose()
+
+  const first = dock.register({ id: 'reload-probe', label: 'old', icon: '', onActivate() {} })
+  const second = dock.register({ id: 'reload-probe', label: 'new', icon: '', onActivate() {} })
+  first.dispose()
+  assert.equal(dockRoot.children.some(child => child.title === 'new'), true,
+    'an obsolete registration must not remove its HMR replacement')
+  second.dispose()
 })

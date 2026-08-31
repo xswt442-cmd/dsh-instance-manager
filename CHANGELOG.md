@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## Unreleased
+
+### Changed
+
+- The `DSH Instance` launcher joins TreeKeeper through a metadata-versioned page-local dock protocol. Registration handles are ownership-safe, so an obsolete HMR disposer cannot remove its replacement; opening one dock panel closes the active sibling panel.
+
 ## 0.9.1 - 2026-08-31
 
 ### Fixed

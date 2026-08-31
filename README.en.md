@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-DSH Web Instance Management Plugin. Uses the shared tool dock as the entry point. Lists all DSH Web instances within the local port range, with support for viewing instance details, stopping instances, and launching new ones. Once pairing is configured, remote instances can also be viewed.
+DSH Web instance manager, opened from `DSH Instance` in the shared utility dock. It lists DSH Web instances in the local port range, shows details, stops instances, and launches new ones; configured peers add remote instances. DIM and TreeKeeper reuse one page-local dock through a versioned private protocol, with no prerequisite plugin.
 
 ## Features
 

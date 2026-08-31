@@ -6,7 +6,7 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-DSH Web 实例管理插件，设置共享工具坞作为入口。列出本机端口段内的全部 dsh web 实例，支持详情查看、停止、启动新实例；配置配对后可查看远程实例。
+DSH Web 实例管理插件，以共享工具坞中的 `DSH Instance` 为入口。列出本机端口段内的全部 dsh web 实例，支持详情查看、停止、启动新实例；配置配对后可查看远程实例。DIM 与 TreeKeeper 通过页面内版本化协议复用同一个 Dock，不需要额外前置插件。
 
 ## 功能
 
