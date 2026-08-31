@@ -79,6 +79,8 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   assert.equal(dock.protocol, 'createhelper.dsh.utility-dock')
   assert.equal(dock.version, 1)
   assert.equal(dockRoot.children[0].title, 'DSH Instance')
+  assert.equal((source.match(/appTitle: 'DSH Instance'/g) || []).length, 2,
+    'both panel languages use the same product title')
 
   dockRoot.children[0].listeners.click()
   assert.equal(dockRoot.children[0].attributes['aria-pressed'], 'true')
