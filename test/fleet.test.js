@@ -1,7 +1,7 @@
 // Unit tests for the fleet peer-link helpers in lib/fleet.js (F2).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parsePeers, LINK_PATH, createQueryResponder } from '../lib/fleet.js'
+import { parsePeers, LINK_PATH, createQueryResponder, FleetLinks } from '../lib/fleet.js'
 import { normalizePort } from '../lib/shared.js'
 
 test('parsePeers parses id@origin pairs into ws link descriptors', () => {
@@ -40,7 +40,7 @@ const makeResponder = (over = {}) => {
   const deps = {
     fleetId: () => 'fleet-abc',
     version: '9.9.9',
-    listInstances: async () => ({
+    listLocalInstances: async () => ({
       currentPort: 3080,
       items: [{ port: 3080, remote: false }, { port: 4099, remote: true }]
     }),
@@ -106,4 +106,107 @@ test('query responder reports unknown kinds instead of guessing', async () => {
   const { answer, calls } = makeResponder()
   assert.deepEqual(await answer({ kind: 'stop-everything' }), { ok: false, code: 'unknown_query' })
   assert.deepEqual(calls, [], 'an unrecognized kind must not reach any instance state')
+})
+
+// ---- mutual peering must not amplify (F2) -------------------------------
+// The natural fleet config is two machines that each list the other. Answering
+// a peer's `fleet` query by re-listing the WHOLE fleet — peers included — made
+// that pair answer each other forever: A asks B, B's answer asks A, A's answer
+// asks B... measured at 5000 nested listings in 70 ms, every one a full 50-port
+// sweep, on both machines, from a single panel refresh.
+//
+// The host removes it at the source (the responder gets the peer-free
+// listLocalInstances). This test pins the transport-level guard that holds
+// even when the injected lister is NOT peer-free.
+const WS_OPEN = 1
+class MemSocket {
+  constructor(url) { this.url = url; this.readyState = WS_OPEN; this.h = {}; this.remote = null; this.isAlive = true }
+  on(ev, fn) { (this.h[ev] = this.h[ev] || []).push(fn); return this }
+  emit(ev, ...a) { for (const fn of this.h[ev] || []) fn(...a) }
+  send(data) {
+    const text = String(data)
+    queueMicrotask(() => {
+      if (this.remote && this.remote.readyState === WS_OPEN) this.remote.emit('message', text)
+    })
+  }
+  ping() { }
+  close() { this.readyState = 3; this.emit('close') }
+  terminate() { this.close() }
+}
+class MemWSS { handleUpgrade(req, socket, head, cb) { cb(socket) } }
+
+const wireMutualPeers = async () => {
+  const dials = []
+  const counts = { a: 0, b: 0 }
+  class Dial extends MemSocket { constructor(url) { super(url); dials.push(this) } }
+  const build = (name, peerName) => {
+    const node = { name, peerName }
+    node.hub = new FleetLinks({
+      WebSocket: Dial,
+      WebSocketServer: MemWSS,
+      safeTokenEqual: (x, y) => x === y,
+      fleetId: () => 'fleet-' + name,
+      resolveToken: async () => 'tok',
+      // Deliberately the WRONG shape for this test: answering a fleet query
+      // re-lists the whole fleet, peers included. The guard must survive it.
+      answerQuery: createQueryResponder({
+        fleetId: () => 'fleet-' + name,
+        version: '0.9.1',
+        listLocalInstances: async () => {
+          counts[name] += 1
+          if (counts[name] > 200) throw new Error('runaway: ' + name + ' listed ' + counts[name] + ' times')
+          await node.hub.queryPeer(node.peerName, { kind: 'fleet' }, 300)
+          return { currentPort: 3080, items: [{ port: 3080, remote: false }] }
+        },
+        sessionsFor: async () => ({ ok: true }),
+        logsFor: async () => ({ ok: true })
+      })
+    }, [{ id: peerName, wsUrl: 'ws://' + peerName + '/link' }])
+    return node
+  }
+  const A = build('a', 'b')
+  const B = build('b', 'a')
+  await new Promise((r) => setTimeout(r, 10))
+  // A dials B and B dials A: hand each outbound socket to the other's inbound.
+  const aSide = dials.find((d) => d.url === 'ws://b/link')
+  const bSide = dials.find((d) => d.url === 'ws://a/link')
+  assert.ok(aSide && bSide, 'both peers must have dialed')
+  const bAccept = new MemSocket()
+  const aAccept = new MemSocket()
+  aSide.remote = bAccept; bAccept.remote = aSide; aSide.emit('open')
+  bSide.remote = aAccept; aAccept.remote = bSide; bSide.emit('open')
+  B.hub.attachInbound(bAccept)
+  A.hub.attachInbound(aAccept)
+  return { A, B, counts }
+}
+
+test('a mutually-peered pair answers one fleet query without amplification', async () => {
+  const { A, B, counts } = await wireMutualPeers()
+  try {
+    const res = await A.hub.queryPeer('b', { kind: 'fleet' }, 1000)
+    assert.equal(res.ok, true, 'the peer must still answer: ' + JSON.stringify(res))
+    assert.equal(counts.b, 1, 'the answering side lists exactly once')
+    assert.equal(counts.a, 0, 'and must NOT be pulled into listing itself')
+  } finally {
+    A.hub.dispose(); B.hub.dispose()
+  }
+})
+
+test('a fleet query nested inside an inbound fleet answer is refused, not forwarded', async () => {
+  const { A, B, counts } = await wireMutualPeers()
+  try {
+    // Drive the nested query directly: while B is answering A, B may not ask
+    // anyone. This is the invariant the amplification test above exercises
+    // end-to-end; here it is asserted on the returned code.
+    B.hub.answeringFleet += 1
+    const nested = await B.hub.queryPeer('a', { kind: 'fleet' }, 300)
+    B.hub.answeringFleet -= 1
+    assert.deepEqual(nested, { ok: false, code: 'fleet_query_nested' })
+    assert.equal(counts.b, 0, 'a refused query must never reach the lister')
+    // Non-fleet kinds stay available (a nested sessions/log read is legal).
+    const other = await B.hub.queryPeer('a', { kind: 'sessions', port: 3080 }, 300)
+    assert.ok(other.ok !== undefined, 'only fleet queries are guarded')
+  } finally {
+    A.hub.dispose(); B.hub.dispose()
+  }
 })
