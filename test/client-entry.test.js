@@ -60,6 +60,16 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
     // leave the panel silently absent. It waits through ctx.inject instead.
     inject(names, mount) {
       injected = names
+      if (Array.from(names).indexOf('settingsScope') !== -1) {
+        // Benign binder: an unavailable namespace keeps the localStorage value.
+        mount({
+          bind: () => ({
+            getSnapshot: () => ({ status: 'unavailable' }),
+            subscribe() { return () => { } }
+          })
+        })
+        return
+      }
       mount({ slots, on() {} })
     },
     on() {}
@@ -67,7 +77,8 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   // Compared element-wise: `injected` is created inside the vm sandbox, so its
   // Array prototype is not reference-equal to this realm's.
   assert.equal(Array.isArray(injected), true)
-  assert.deepEqual(Array.from(injected), ['slots'])
+  assert.deepEqual(Array.from(injected), ['settingsScope'],
+    'the settings binding is injected last; the slots injection above already ran')
 
   assert.deepEqual(registered.map(entry => entry.options.id), [
     'instance-manager-panel',
@@ -96,4 +107,163 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   assert.equal(dockRoot.children.some(child => child.title === 'new'), true,
     'an obsolete registration must not remove its HMR replacement')
   second.dispose()
+})
+
+test('dock placement migrates from localStorage and then follows settings snapshots', () => {
+  let definition = null
+  let styleElement = null
+  let dockRoot = null
+  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const makeElement = () => ({
+    style: { setProperty() {} },
+    dataset: {},
+    attributes: {},
+    listeners: {},
+    children: [],
+    setAttribute(name, value) { this.attributes[name] = String(value) },
+    addEventListener(name, listener) { this.listeners[name] = listener },
+    appendChild(value) { this.children.push(value) },
+    replaceChildren() { this.children = [] },
+    remove() {}
+  })
+  const storage = { 'createhelper.utilityDock.placement': 'main-bottom-right' }
+  const context = {
+    localStorage: {
+      getItem: (key) => (key in storage ? storage[key] : null),
+      setItem: (key, value) => { storage[key] = String(value) }
+    },
+    document: {
+      body: { appendChild(value) { dockRoot = value } },
+      documentElement: { dataset: {}, style: { setProperty() {} } },
+      head: { appendChild(value) { styleElement = value } },
+      createElement: makeElement,
+      querySelector(selector) {
+        return selector.startsWith('style[') ? styleElement : null
+      }
+    },
+    window: {
+      addEventListener() {},
+      removeEventListener() {},
+      __ModuleLoader__: { load(value) { definition = value } }
+    }
+  }
+  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
+  const plugin = definition.factory(() => ({ createElement() {} }))
+
+  // The dock must exist so placement changes flow through the shared
+  // protocol (localStorage mirror + geometry), exactly like production.
+  const slots = {
+    inject(name, factory) { factory() },
+    register() { return () => {} }
+  }
+  let snapshot = { status: 'loading', value: undefined, user: undefined }
+  const listeners = new Set()
+  const sets = []
+  const scope = {
+    getSnapshot: () => snapshot,
+    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) },
+    set(field, value) { sets.push([field, value]); return Promise.resolve() }
+  }
+  plugin.apply({
+    inject(names, mount) {
+      if (Array.from(names).indexOf('settingsScope') !== -1) mount({ bind: () => scope })
+      else mount({ slots, on() {} })
+    },
+    on() {}
+  })
+
+  // While loading, nothing is applied and nothing is migrated yet.
+  assert.deepEqual(sets, [])
+  const placementAttr = () => context.document.documentElement.dataset.createhelperUtilityDockPlacement
+
+  // First ready snapshot: the legacy localStorage value migrates ONCE into
+  // the user layer, and stays effective until the host commit round-trips.
+  snapshot = {
+    status: 'ready',
+    value: { dockPlacement: 'main-bottom-left', refreshIntervalMs: 4000 },
+    user: {}
+  }
+  for (const fn of Array.from(listeners)) fn()
+  assert.deepEqual(sets, [['dockPlacement', 'main-bottom-right']])
+  assert.equal(placementAttr(), 'main-bottom-right',
+    'the migrated value wins over the (default) snapshot until the commit lands')
+  assert.equal(storage['createhelper.utilityDock.placement'], 'main-bottom-right')
+
+  // Host commit: the user layer now carries the field; settings is
+  // authoritative and the pending legacy value is dropped.
+  snapshot = {
+    status: 'ready',
+    value: { dockPlacement: 'main-bottom-right', refreshIntervalMs: 4000 },
+    user: { dockPlacement: 'main-bottom-right' }
+  }
+  for (const fn of Array.from(listeners)) fn()
+  assert.deepEqual(sets, [['dockPlacement', 'main-bottom-right']], 'migration never writes twice')
+  assert.equal(placementAttr(), 'main-bottom-right')
+
+  // A settings edit repositions the dock and keeps the localStorage mirror.
+  snapshot = {
+    status: 'ready',
+    value: { dockPlacement: 'hidden', refreshIntervalMs: 8000 },
+    user: { dockPlacement: 'hidden' }
+  }
+  for (const fn of Array.from(listeners)) fn()
+  assert.equal(placementAttr(), 'hidden')
+  assert.equal(storage['createhelper.utilityDock.placement'], 'hidden')
+})
+
+test('unavailable settings keep the localStorage placement instead of defaults', () => {
+  let definition = null
+  let styleElement = null
+  let dockRoot = null
+  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const makeElement = () => ({
+    style: { setProperty() {} },
+    dataset: {},
+    attributes: {},
+    listeners: {},
+    children: [],
+    setAttribute() {},
+    addEventListener() {},
+    appendChild(value) { this.children.push(value) },
+    replaceChildren() { this.children = [] },
+    remove() {}
+  })
+  const storage = { 'createhelper.utilityDock.placement': 'hidden' }
+  const context = {
+    localStorage: {
+      getItem: (key) => (key in storage ? storage[key] : null),
+      setItem: (key, value) => { storage[key] = String(value) }
+    },
+    document: {
+      body: { appendChild(value) { dockRoot = value } },
+      documentElement: { dataset: {}, style: { setProperty() {} } },
+      head: { appendChild(value) { styleElement = value } },
+      createElement: makeElement,
+      querySelector() { return null }
+    },
+    window: {
+      addEventListener() {},
+      removeEventListener() {},
+      __ModuleLoader__: { load(value) { definition = value } }
+    }
+  }
+  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
+  const plugin = definition.factory(() => ({ createElement() {} }))
+  plugin.apply({
+    inject(names, mount) {
+      if (Array.from(names).indexOf('settingsScope') !== -1) {
+        mount({
+          bind: () => ({
+            getSnapshot: () => ({ status: 'unavailable' }),
+            subscribe() { return () => { } }
+          })
+        })
+        return
+      }
+      mount({ slots: { inject(name, factory) { factory() }, register() { return () => {} } }, on() {} })
+    },
+    on() {}
+  })
+  assert.equal(context.document.documentElement.dataset.createhelperUtilityDockPlacement, 'hidden',
+    'memory mode / unexposed namespace falls back to the localStorage value')
 })
