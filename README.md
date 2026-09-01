@@ -6,17 +6,16 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-DSH Web 实例管理插件，设置共享工具坞作为入口。列出本机端口段内的全部 dsh web 实例，支持详情查看、停止、启动新实例；配置配对后可查看远程实例。
+DSH Web 实例管理插件，以共享工具坞中的 `DSH Instance` 为入口。列出本机端口段内的全部 dsh web 实例，支持详情查看、停止、启动新实例；配置配对后可查看远程实例。DIM 与 TreeKeeper 通过页面内版本化协议复用同一个 Dock，不需要额外前置插件。
 
 ## 功能
 
-- **实例列表**：端口 / PID / 运行时长 / 会话数 / 内存；4s 自动刷新（后台标签页暂停）；插件版本不一致标「版本差异」
-- **实例详情**：抽屉查看启动时间、内存走势、stdout/stderr 日志（200 行）、活跃会话概要
-- **启停控制**：启动新实例（等待自报就绪，返回 pid）；优雅停止任意实例（`appExit`，会话落盘）；停止当前实例与全部结束需二次确认
-- **跨机舰队（≥0.9）**：配置 peer 后，面板合并远程实例列表，抽屉可查远程会话与日志
-- **Agent 工具**：`instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`
-- **上下线提醒**：实例与 peer 状态变化经 SSE 即时 toast
-- **中英切换**：偏好存 localStorage
+- **实例列表**：端口 / PID / 运行时长 / 会话数 / 内存；4s 自动刷新（后台标签页暂停）；插件版本不一致标「版本差异」。
+- **实例详情**：抽屉查看启动时间、内存走势、stdout/stderr 日志（200 行）、活跃会话概要。
+- **启停控制**：启动新实例（等待自报就绪，返回 pid）；优雅停止任意实例（`appExit`，会话落盘）；停止当前实例与全部结束需二次确认；实例与 peer 状态变化经 SSE 即时 toast。
+- **Agent 工具**：`instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`。
+- **中英切换**：偏好存 localStorage。
+- **工具坞**：Session 左下角设置工具坞作为入口。
 
 ## 安装
 
@@ -58,7 +57,7 @@ setx DSHIM_FLEET_TOKEN "足够长的随机串"        # 双方一致
 setx DSHIM_PEERS "office@http://192.168.1.20:3080"
 ```
 
-- 重启后面板合并 peer 实例（`@id` 徽章），抽屉可查远程会话与日志；`instance_sessions` / `instance_logs` 支持 `peer=`
+- 实例行带 `@id` 徽章；`instance_sessions` / `instance_logs` 支持 `peer=`
 - `action=list` 的 `peers` 字段报告 `online` / `unreachable` / `timeout`
 - 配对是单向配置的，两台机器互相可见就是各自把对方写进 `DSHIM_PEERS` —— 这是受支持的形态（`fleet` 查询只用本地行作答，不会再回头问 peer）
 - 无 token 时链路一律 403（fail-closed）

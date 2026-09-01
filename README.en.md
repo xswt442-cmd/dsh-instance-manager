@@ -6,17 +6,16 @@
 ![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-DSH Web Instance Management Plugin. Uses the shared tool dock as the entry point. Lists all DSH Web instances within the local port range, with support for viewing instance details, stopping instances, and launching new ones. Once pairing is configured, remote instances can also be viewed.
+DSH Web instance manager, opened from `DSH Instance` in the shared utility dock. It lists DSH Web instances in the local port range, shows details, stops instances, and launches new ones; configured peers add remote instances. DIM and TreeKeeper reuse one page-local dock through a versioned private protocol, with no prerequisite plugin.
 
 ## Features
 
-- **Instance list**: port / PID / uptime / sessions / memory; 4 s auto-refresh (paused on hidden tabs); plugin-version mismatch gets a "version skew" badge
-- **Instance details**: drawer with start time, memory trend, stdout/stderr log tails (200 lines), live session summary
-- **Start / stop**: launch a new instance (waits for its self-report, returns the pid); graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice
-- **Remote fleet (>= 0.9)**: with peers configured, the panel merges remote instances and the drawer reads their sessions and logs
-- **Agent tools**: `instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`
-- **Up/down toasts**: instance and peer status changes via SSE
-- **zh / EN toggle**: preference persisted in localStorage
+- **Instance list**: port / PID / uptime / sessions / memory; 4 s auto-refresh (paused on hidden tabs); plugin-version mismatch gets a "version skew" badge.
+- **Instance details**: drawer with start time, memory trend, stdout/stderr log tails (200 lines), live session summary.
+- **Start / stop**: launch a new instance (waits for its self-report, returns the pid); graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice; instance and peer status changes toast via SSE.
+- **Agent tools**: `instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`.
+- **zh / EN toggle**: preference persisted in localStorage.
+- **Utility Dock**: Use the dock in the bottom-left corner of the Session settings as the entry point.
 
 ## Install
 
@@ -58,7 +57,7 @@ setx DSHIM_FLEET_TOKEN "a-long-random-string"      # must match on both sides
 setx DSHIM_PEERS "office@http://192.168.1.20:3080"
 ```
 
-- After a restart the panel merges peer instances (badged `@id`); the drawer reads remote sessions and logs; `instance_sessions` / `instance_logs` accept `peer=`
+- Rows are badged `@id`; `instance_sessions` / `instance_logs` accept `peer=`
 - `action=list` reports each peer's status in `peers`: `online` / `unreachable` / `timeout`
 - Peering is per-direction, so two machines that should see each other list each other in `DSHIM_PEERS` — that is the supported shape (a `fleet` query is answered from local rows only and never re-queries a peer)
 - Without a token the link always answers 403 (fail-closed)
