@@ -1,7 +1,62 @@
+# Dependencies
 node_modules/
+
+# Logs
 *.log
-test-*
-test1.*
+npm-debug.log*
+yarn-error.log*
+logs/
+
+# Build & coverage output
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Package artifacts
+*.tgz
+*.tar.gz
+.npm/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.npmrc
+*.pem
+*.key
+*.p12
+
+# Ad-hoc QA scripts and scratch — these never belong in the repo
+/bootcheck.sh
+/diag.sh
+/repro*.sh
+/testplace/
+/test-*
+/test1.*
+
+# Local browser captures
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Editors & OS
 .DS_Store
-testplace/
-.workbuddy
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# Agent tooling
+.workbuddy/
+.claude/
+.codex/
+.cursor/
+.continue/
+.aider*
+*.local.md

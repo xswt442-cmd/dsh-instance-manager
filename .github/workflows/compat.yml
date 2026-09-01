@@ -7,6 +7,15 @@ on:
   push:
     branches: [main, dev]
 
+# One run per branch: a burst of commits cancels the superseded runs instead
+# of queueing a full boot-check behind each of them.
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   static:
     name: static checks
@@ -25,6 +34,8 @@ jobs:
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') { console.error('missing default plugin'); process.exit(1) } })"
       - name: unit tests
         run: npm test
+      - name: package contents
+        run: npm pack --dry-run
       - name: manifest consistency
         shell: pwsh
         run: |

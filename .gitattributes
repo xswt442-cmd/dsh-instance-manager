@@ -1,0 +1,29 @@
+# Line endings.
+#
+# Everything is normalized to LF in the repository and checked out with LF.
+# A CRLF inside a .sh -- or inside a multi-line workflow `run:` block -- makes
+# Linux runners fail with `bad interpreter` / `syntax error near unexpected
+# token`, while the same file looks fine when authored on Windows.
+* text=auto eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binaries: never normalize, never diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.tgz binary
+
+# Prose gets the markdown diff driver (word-level in `git diff --word-diff`).
+*.md text diff=markdown
+
+# Generated / vendored: keep out of language stats, still diff normally.
+package-lock.json linguist-generated=true
