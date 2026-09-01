@@ -1,23 +1,33 @@
 name: publish
 
-# Release ritual = one command: bump package.json + CHANGELOG, tag vX.Y.Z,
-# push --tags. This workflow verifies the tag, publishes to npm with
-# provenance, and cuts a GitHub release whose notes come straight from the
-# matching CHANGELOG section.
+# A release is created by bumping package.json + the VERSION constant in
+# lib/shared.js, writing the matching CHANGELOG.md section, then tagging
+# vX.Y.Z and pushing the tag. The GitHub release is cut from that CHANGELOG
+# section, with a compare link to the previous tag appended.
+# npm Trusted Publishing exchanges GitHub's OIDC identity for a publish
+# credential here; no npm token is stored in the repo.
 
 on:
   push:
     tags: ['v*']
+
+# Publishing must never be cancelled halfway through: a second tag landing
+# while the first is on npm would race the registry. Queue instead of cancel.
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
     name: publish to npm
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the GitHub release
-      id-token: write # npm provenance (OIDC)
+      contents: write # Create the matching GitHub release.
+      id-token: write # npm provenance (OIDC).
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, so the notes can compare against the previous tag
 
       - uses: actions/setup-node@v4
         with:
@@ -34,17 +44,20 @@ jobs:
             exit 1
           fi
 
-      - name: sanity checks
+      - name: release checks
         shell: bash
         run: |
           tag=${GITHUB_REF_NAME#v}
           node --check lib/client.js
+          node --check lib/index.js
+          npm test
+          npm run docs:check
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
-          # the self-reported version constant must match the release tag
           grep -qF "VERSION = '${tag}'" lib/shared.js || {
             echo "::error::lib/shared.js VERSION does not match tag ${tag}"
             exit 1
           }
+          npm pack --dry-run
 
       - name: skip when version is already published
         id: published
@@ -56,28 +69,44 @@ jobs:
             echo "::warning::${pkg} is already on npm — nothing to publish"
           fi
 
-      # Auth = npm Trusted Publishing (OIDC), bound to this exact repo +
-      # workflow file in the package's npmjs.com settings. No token secret
-      # exists; --provenance carries the OIDC exchange (needs id-token: write).
       - name: publish to npm
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
 
-      - name: GitHub release with CHANGELOG notes
-        if: steps.published.outputs.already != 'yes'
+      - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          PKG_VERSION: ${{ github.ref_name }}
         shell: bash
         run: |
-          export PKG_VERSION=${GITHUB_REF_NAME#v}
-          notes=$(node -e "
-            const fs=require('fs');
-            const v=process.env.PKG_VERSION;
-            let on=false,out=[];
-            for(const l of fs.readFileSync('CHANGELOG.md','utf8').split('\n')){
-              if(l.startsWith('## ')){ if(on)break; on=l.startsWith('## '+v); continue; }
-              if(on)out.push(l);
+          tag=$GITHUB_REF_NAME
+          notes=$(node <<'NODE'
+          const fs = require('fs')
+          const version = process.env.PKG_VERSION.replace(/^v/, '')
+          const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const heading = new RegExp(`^## (?:\\[${escaped}\\]|${escaped}(?:\\s|$))`)
+          let inSection = false
+          const lines = []
+          for (const line of fs.readFileSync('CHANGELOG.md', 'utf8').split('\n')) {
+            if (line.startsWith('## ')) {
+              if (inSection) break
+              inSection = heading.test(line)
+              continue
             }
-            console.log(out.join('\n').trim()||'Release '+v);
-          ")
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"
+            if (inSection) lines.push(line)
+          }
+          console.log(lines.join('\n').trim() || `Release ${version}`)
+          NODE
+          )
+          repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+          prev=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)
+          if [ -n "$prev" ]; then
+            notes=$(printf '%s\n\n**完整变更**: [`%s...%s`](%s/compare/%s...%s)' "$notes" "$prev" "$tag" "$repo" "$prev" "$tag")
+          else
+            notes=$(printf '%s\n\n**完整变更**: [`%s`](%s/commits/%s)' "$notes" "$tag" "$repo" "$tag")
+          fi
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "GitHub release $tag already exists"
+          else
+            gh release create "$tag" --title "$tag" --notes "$notes"
+          fi
