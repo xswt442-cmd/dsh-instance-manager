@@ -10,11 +10,12 @@ DSH Web 实例管理插件，以共享工具坞中的 `DSH Instance` 为入口�
 
 ## 功能
 
-- **实例列表**：端口 / PID / 运行时长 / 会话数 / 内存；4s 自动刷新（后台标签页暂停）；插件版本不一致标「版本差异」
-- **实例详情**：抽屉查看启动时间、内存走势、stdout/stderr 日志（200 行）、活跃会话概要
-- **启停控制**：启动新实例（等待自报就绪，返回 pid）；优雅停止任意实例（`appExit`，会话落盘）；停止当前实例与全部结束需二次确认；实例与 peer 状态变化经 SSE 即时 toast
-- **Agent 工具**：`instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`
-- **中英切换**：偏好存 localStorage
+- **实例列表**：端口 / PID / 运行时长 / 会话数 / 内存；4s 自动刷新（后台标签页暂停）；插件版本不一致标「版本差异」。
+- **实例详情**：抽屉查看启动时间、内存走势、stdout/stderr 日志（200 行）、活跃会话概要。
+- **启停控制**：启动新实例（等待自报就绪，返回 pid）；优雅停止任意实例（`appExit`，会话落盘）；停止当前实例与全部结束需二次确认；实例与 peer 状态变化经 SSE 即时 toast。
+- **Agent 工具**：`instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`。
+- **中英切换**：偏好存 localStorage。
+- **工具坞**：Session 左下角设置工具坞作为入口。
 
 ## 安装
 

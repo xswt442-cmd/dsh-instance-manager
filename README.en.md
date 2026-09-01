@@ -10,11 +10,12 @@ DSH Web instance manager, opened from `DSH Instance` in the shared utility dock.
 
 ## Features
 
-- **Instance list**: port / PID / uptime / sessions / memory; 4 s auto-refresh (paused on hidden tabs); plugin-version mismatch gets a "version skew" badge
-- **Instance details**: drawer with start time, memory trend, stdout/stderr log tails (200 lines), live session summary
-- **Start / stop**: launch a new instance (waits for its self-report, returns the pid); graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice; instance and peer status changes toast via SSE
-- **Agent tools**: `instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`
-- **zh / EN toggle**: preference persisted in localStorage
+- **Instance list**: port / PID / uptime / sessions / memory; 4 s auto-refresh (paused on hidden tabs); plugin-version mismatch gets a "version skew" badge.
+- **Instance details**: drawer with start time, memory trend, stdout/stderr log tails (200 lines), live session summary.
+- **Start / stop**: launch a new instance (waits for its self-report, returns the pid); graceful stop of any instance (`appExit`, sessions persist); stopping the current instance and stop-all ask twice; instance and peer status changes toast via SSE.
+- **Agent tools**: `instance_list` / `instance_start` / `instance_stop` / `instance_logs` / `instance_sessions`.
+- **zh / EN toggle**: preference persisted in localStorage.
+- **Utility Dock**: Use the dock in the bottom-left corner of the Session settings as the entry point.
 
 ## Install
 
