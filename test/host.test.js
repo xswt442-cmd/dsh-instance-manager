@@ -73,7 +73,8 @@ test('guard passes same-origin browser traffic', () => {
     { 'sec-fetch-site': 'none' },
     { host: '127.0.0.1:3080' },
     { origin: 'http://127.0.0.1:3080' },
-    { host: '[::1]:3080', origin: 'http://localhost:3080' }
+    { host: '[::1]:3080', origin: 'http://localhost:3080' },
+    { host: '[::1]:3080', origin: 'http://[::1]:3080' }
   ]) {
     assert.equal(guard(reqOf(headers)), true, JSON.stringify(headers))
   }
@@ -91,7 +92,9 @@ test('guard rejects cross-site fetch metadata with 403', () => {
 test('guard rejects foreign Origin with 403 (including right host, wrong port)', () => {
   const { guard, rejections } = makeGuard()
   assert.equal(guard(reqOf({ origin: 'https://evil.example' })), false)
+  assert.equal(guard(reqOf({ origin: 'http://evil.localhost:3080' })), false)
   assert.equal(guard(reqOf({ origin: 'http://127.0.0.1:3999' })), false)
+  assert.equal(guard(reqOf({ origin: 'http://[::1]:3999' })), false)
   assert.equal(rejections.every((r) => r.code === 403), true)
   assert.equal(rejections.every((r) => r.obj.code === 'bad_origin'), true)
 })
@@ -100,6 +103,7 @@ test('guard rejects non-loopback Host with 403 (DNS rebinding closed)', () => {
   const { guard, rejections } = makeGuard()
   assert.equal(guard(reqOf({ host: 'rebound.example' })), false)
   assert.equal(guard(reqOf({ host: 'rebound.example:3080' })), false)
+  assert.equal(guard(reqOf({ host: 'evil.localhost:3080' })), false)
   assert.equal(rejections.every((r) => r.code === 403), true)
   assert.equal(rejections.every((r) => r.obj.code === 'bad_host'), true)
 })
@@ -302,6 +306,23 @@ test('awaitChild returns empty (not died) when the confirm window just closes', 
   const child = fakeChild()
   const pending = awaitChild({ child, confirmMs: 0, sleep: noSleep, probe: async () => false })
   assert.deepEqual(await pending, {})
+})
+
+test('awaitChild stops probing once the race has a verdict', async () => {
+  // Regression: the probe loop kept running to the full confirm window after
+  // the race settled, probing a dead child every 500ms and racing a retry
+  // launch's probes. 5ms ticks against a 10s window make the drift observable.
+  let calls = 0
+  const child = fakeChild()
+  const tick = () => new Promise((r) => setTimeout(r, 5))
+  const pending = awaitChild({ child, confirmMs: 10_000, sleep: tick, probe: async () => (++calls, false) })
+  await new Promise((r) => setTimeout(r, 20))
+  assert.ok(calls >= 1, 'probe loop must be running before a verdict')
+  child.fire('exit', 1)
+  assert.deepEqual(await pending, { died: true, code: 1 })
+  const atSettle = calls
+  await new Promise((r) => setTimeout(r, 25))
+  assert.equal(calls, atSettle, 'no further probe may fire after the race settles')
 })
 
 test('managedLocalPorts tracks managed LOCAL rows only', () => {

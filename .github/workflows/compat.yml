@@ -50,6 +50,15 @@ jobs:
           if ($patch -notmatch [regex]::Escape($pkg.name)) { Write-Error 'patch does not mount this package' }
           $shared = Get-Content lib/shared.js -Raw
           if ($shared -notmatch [regex]::Escape("VERSION = '$($pkg.version)'")) { Write-Error 'lib/shared.js VERSION does not match package version' }
+          # Dock placement literals: lib/shared.js validates them host-side,
+          # lib/client.js embeds the dock fragment that consumes them. The two
+          # must list the same values or a renamed placement silently breaks
+          # the settings UI and the cross-plugin panel positioning (see
+          # DOCK_PLACEMENTS in shared.js). The dock repo owns the original;
+          # this pins the same-repo mirror only.
+          $dockPlacements = "'main-bottom-left', 'main-bottom-right', 'hidden'"
+          if ($shared -notmatch [regex]::Escape($dockPlacements)) { Write-Error 'lib/shared.js DOCK_PLACEMENTS literal drifted' }
+          if ($client -notmatch [regex]::Escape($dockPlacements)) { Write-Error 'lib/client.js embedded dock placements diverged from lib/shared.js' }
 
   boot-check:
     name: boot dsh web with bundle (${{ matrix.os }})
