@@ -34,6 +34,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      - name: install development dependencies
+        run: npm install --ignore-scripts
+
       - name: tag matches package.json version
         shell: bash
         run: |

@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: install development dependencies
+        run: npm install --ignore-scripts
       - name: client.js syntax
         run: node --check lib/client.js
       - name: index.js syntax
