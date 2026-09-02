@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.4 - 2026-09-02
+
+### Changed
+
+- The Mini Utility Dock is now synchronized at build time from `dsh-mini-utility-dock`; published plugins remain standalone.
+- The Dock now filters external SVG icons and renders a text fallback for rejected markup.
+
 ## 0.9.3 - 2026-09-01
 
 ### Added

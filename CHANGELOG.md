@@ -3,6 +3,13 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.9.4 - 2026-09-02
+
+### 变更
+
+- Mini Utility Dock 改由 `dsh-mini-utility-dock` 在构建时同步，插件发布物仍可独立运行。
+- Dock 统一过滤外部 SVG 图标，并为无效图标显示文本回退。
+
 ## 0.9.3 - 2026-09-01
 
 ### 新增
@@ -190,4 +197,3 @@ Release Notes 由对应版本段生成；最新版本在前。
 ### 新增
 
 - 首次发布：列出并优雅停止 3080–3129 端口上的本地 DSH Web 实例。
-
