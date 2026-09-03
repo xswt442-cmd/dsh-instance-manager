@@ -11,7 +11,7 @@
     "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.1.0"
+    "dsh-mini-utility-dock": "0.1.1"
   },
   "exports": {
     ".": "./lib/index.js",
