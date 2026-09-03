@@ -184,7 +184,30 @@ const callApi = async (query, method = 'GET') => {
       end: (chunk) => { body = chunk }
     }
     // Loopback Host with no Origin / Sec-Fetch-Site: the guard's happy path.
-    await route.handler({ url: API_PATH + '?' + query, method, headers: { host: '127.0.0.1' } }, res)
+    // The socket peer is loopback (local browser/UI) — a real HTTP connection
+    // always carries one, and the guard fails closed without it.
+    await route.handler({ url: API_PATH + '?' + query, method, headers: { host: '127.0.0.1' }, socket: { remoteAddress: '127.0.0.1' } }, res)
+    return { status, json: body ? JSON.parse(body) : null }
+  } finally {
+    dispose()
+  }
+}
+
+// Full control over the request: forge an off-loopback socket peer, set a
+// bearer, or drop the socket entirely to exercise the trust-boundary gates.
+const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {} }) => {
+  const { routes, dispose } = mount()
+  try {
+    const route = routes.find((r) => r.path === API_PATH)
+    let status = 0
+    let body = ''
+    const res = {
+      writeHead: (code) => { status = code },
+      end: (chunk) => { body = chunk }
+    }
+    const req = { url: API_PATH + '?' + query, method, headers: { host, ...headers } }
+    if (remoteAddress !== undefined) req.socket = { remoteAddress }
+    await route.handler(req, res)
     return { status, json: body ? JSON.parse(body) : null }
   } finally {
     dispose()
@@ -306,4 +329,67 @@ test('disposal releases the process fatal-path hooks', () => {
   dispose()
   assert.equal(process.listenerCount('uncaughtException'), before)
   assert.equal(process.listenerCount('unhandledRejection'), beforeRejection)
+})
+
+// ---- P1: forged-loopback-Host bypass of the fleet bearer ------------------
+// A remote attacker cannot set the socket peer, only the Host header. The
+// bearer gate must therefore be driven by the real TCP peer, not Host.
+test('a forged loopback Host from an off-loopback peer cannot skip the bearer (stop-all stays unexecuted)', async () => {
+  // No fleet token configured: the remote surface must fail closed.
+  const r = await callApiFull({
+    query: 'action=stop-all',
+    method: 'POST',
+    remoteAddress: '203.0.113.5',
+    headers: { host: '127.0.0.1:3080' }
+  })
+  assert.equal(r.status, 403, 'off-loopback peer must clear the bearer first')
+  assert.equal(r.json.code, 'fleet_auth', 'the mutating action is never reached')
+  assert.notEqual(typeof r.json.stoppedRemote, 'number', 'stop-all did NOT execute')
+})
+
+test('a configured fleet token unlocks the remote mode for an off-loopback peer', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-remote-'))
+  const savedHome = process.env.DSH_HOME
+  const savedToken = process.env.DSHIM_FLEET_TOKEN
+  process.env.DSH_HOME = home
+  process.env.DSHIM_FLEET_TOKEN = 'test-fleet-token'
+  try {
+    const r = await callApiFull({
+      query: 'action=logs&port=3080',
+      method: 'GET',
+      remoteAddress: '203.0.113.5',
+      headers: { host: '127.0.0.1:3080', authorization: 'Bearer test-fleet-token' }
+    })
+    assert.equal(r.status, 200, 'valid bearer over a remote peer is allowed')
+    assert.equal(r.json.ok, true)
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    if (savedToken === undefined) delete process.env.DSHIM_FLEET_TOKEN
+    else process.env.DSHIM_FLEET_TOKEN = savedToken
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('loopback peers (127.0.0.1, ::1, ::ffff:127.0.0.1) need no bearer', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-lb-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+      const r = await callApiFull({ query: 'action=logs&port=3080', remoteAddress: peer })
+      assert.equal(r.status, 200, peer)
+      assert.equal(r.json.ok, true, peer)
+    }
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('a request with no socket peer fails closed at the guard', async () => {
+  const r = await callApiFull({ query: 'action=list', remoteAddress: undefined })
+  assert.equal(r.status, 403)
+  assert.equal(r.json.code, 'unknown_peer')
 })

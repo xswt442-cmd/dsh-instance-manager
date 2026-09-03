@@ -49,7 +49,7 @@ Peer configuration is directional; configure each side when both machines should
 
 - The local API rejects cross-site origins, non-loopback hosts, and unsafe Fetch Metadata.
 - Mutating actions are POST-only; ports must be decimal integers from 1 to 65535.
-- Non-loopback requests require a fleet bearer token and fail closed when it is missing or unresolved.
+- Whether a fleet bearer is required is decided by the **real TCP peer address (socket), not just the Host header**: an off-loopback peer OR an off-loopback Host triggers the bearer. A forged `Host: 127.0.0.1` cannot hide an off-loopback peer, and a missing peer address is rejected outright. Requests fail closed when the token is missing or unresolved.
 - The fleet token has no action-level scopes. A holder can start or stop local instances and read session information, so grant it only to trusted devices.
 - SSE remains local-only.
 

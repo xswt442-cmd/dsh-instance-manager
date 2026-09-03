@@ -10,6 +10,8 @@ import {
   LOOPBACK_HOSTNAMES,
   isLoopbackName,
   hostHostname,
+  isLoopbackAddress,
+  requestNeedsBearer,
   createGuard,
   resolveDshBin,
   resolveDshHome,
@@ -63,7 +65,11 @@ const makeGuard = (currentPort = () => 3080) => {
   const respond = (res, code, obj) => { rejections.push({ code, obj }) }
   return { guard: createGuard({ currentPort, respond }), rejections }
 }
-const reqOf = (headers) => ({ headers })
+// A real HTTP request always carries a socket peer; default it to loopback
+// (local browser/UI) so the happy path is exercised, and let a test pass a
+// forged off-loopback address to simulate a remote attacker.
+const reqOf = (headers, remoteAddress) =>
+  ({ headers, socket: { remoteAddress: remoteAddress || '127.0.0.1' } })
 
 test('guard passes same-origin browser traffic', () => {
   const { guard, rejections } = makeGuard()
@@ -132,6 +138,93 @@ test('guard allowRemoteHost defers non-loopback Hosts to bearer verification', (
   const strictGuard = createGuard({ currentPort: () => 3080, respond })
   assert.equal(strictGuard(reqOf({ host: 'box.lan:3080' })), false)
   assert.equal(rejections.some((r) => r.obj.code === 'bad_host'), true)
+})
+
+test('isLoopbackAddress trusts only the real socket peer, never headers', () => {
+  assert.equal(isLoopbackAddress('127.0.0.1'), true)
+  assert.equal(isLoopbackAddress('::1'), true)
+  assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true, 'IPv4-mapped IPv6 folds back to 127/8')
+  assert.equal(isLoopbackAddress('::FFFF:127.0.0.1'), true, 'case-insensitive')
+  assert.equal(isLoopbackAddress('127.255.255.254'), true)
+  assert.equal(isLoopbackAddress(''), false, 'missing fails closed')
+  assert.equal(isLoopbackAddress(undefined), false)
+  assert.equal(isLoopbackAddress('0.0.0.0'), false, 'wildcard is not loopback')
+  assert.equal(isLoopbackAddress('8.8.8.8'), false)
+  assert.equal(isLoopbackAddress('::ffff:8.8.8.8'), false, 'mapped non-loopback stays non-loopback')
+  assert.equal(isLoopbackAddress('example.com'), false)
+})
+
+test('guard requires the fleet bearer for an off-loopback TCP peer (closes forged-loopback-Host bypass)', () => {
+  const rejections = []
+  const respond = (res, code, obj) => { rejections.push({ code, obj }) }
+  const fleetGuard = createGuard({ currentPort: () => 3080, respond, allowRemoteHost: () => true })
+  // Remote attacker forges a loopback Host and omits Origin/Sec-Fetch-Site —
+  // the OLD guard passed this and skipped the bearer. The peer address is the
+  // only unforgeable signal, so the guard now treats it as remote.
+  assert.equal(fleetGuard(reqOf({ host: '127.0.0.1:3080' }, '203.0.113.5')), true,
+    'guard defers to the handler; bearer is enforced there')
+  // The strict (events) guard has no fleet mode, so the same off-loopback peer
+  // is rejected outright — pure hardening, no legitimate local request uses it.
+  const strictGuard = createGuard({ currentPort: () => 3080, respond })
+  assert.equal(strictGuard(reqOf({ host: '127.0.0.1:3080' }, '203.0.113.5')), false)
+  assert.equal(rejections.at(-1).obj.code, 'bad_host')
+})
+
+test('guard accepts loopback peers regardless of address shape, with no bearer', () => {
+  const { guard, rejections } = makeGuard()
+  for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+    assert.equal(guard(reqOf({ host: '127.0.0.1:3080' }, peer)), true, peer)
+  }
+  assert.equal(rejections.length, 0)
+})
+
+test('guard fails closed when the socket peer is missing (cannot identify caller)', () => {
+  const rejections = []
+  const respond = (res, code, obj) => { rejections.push({ code, obj }) }
+  const fleetGuard = createGuard({ currentPort: () => 3080, respond, allowRemoteHost: () => true })
+  const noSocket = { headers: { host: '127.0.0.1:3080' } }
+  assert.equal(fleetGuard(noSocket), false)
+  assert.equal(rejections.at(-1).obj.code, 'unknown_peer')
+})
+
+test('guard fails closed on a blank peer address (empty string identifies nobody)', () => {
+  // Regression: the guard only tested `peerAddress == null`, so an empty
+  // remoteAddress passed as "not remote" even though it identifies no caller.
+  // `reqOf` cannot express this case — it defaults a falsy address back to
+  // loopback — so these request objects are built by hand.
+  const rejections = []
+  const respond = (res, code, obj) => { rejections.push({ code, obj }) }
+  const fleetGuard = createGuard({ currentPort: () => 3080, respond, allowRemoteHost: () => true })
+  for (const blank of ['', '   ']) {
+    assert.equal(fleetGuard({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: blank } }), false, JSON.stringify(blank))
+    assert.equal(rejections.at(-1).obj.code, 'unknown_peer')
+  }
+  // The route-level decision has to agree with the guard: if one of them
+  // treats an unidentified caller as local, the bearer gate is bypassable.
+  assert.equal(requestNeedsBearer({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '' } }), true)
+})
+
+test('requestNeedsBearer mirrors the guard: peer OR Host off-loopback demands the bearer', () => {
+  const local = { headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1' } }
+  assert.equal(requestNeedsBearer(local), false, 'loopback peer + loopback Host is trusted')
+  const forged = { headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '203.0.113.5' } }
+  assert.equal(requestNeedsBearer(forged), true, 'loopback Host cannot hide an off-loopback peer')
+  const badHost = { headers: { host: 'box.lan:3080' }, socket: { remoteAddress: '127.0.0.1' } }
+  assert.equal(requestNeedsBearer(badHost), true, 'off-loopback Host still demands the bearer')
+})
+
+test('guard accepts a same-origin request whose default port is omitted (service on 80)', () => {
+  // Regression (P2): WHATWG normalises `http://127.0.0.1` to port "", which the
+  // old `String(o.port || '')` compared against "80" and rejected as bad_origin.
+  const { guard, rejections } = makeGuard(() => 80)
+  assert.equal(guard(reqOf({ origin: 'http://127.0.0.1' })), true)
+  assert.equal(guard(reqOf({ origin: 'http://127.0.0.1:80' })), true)
+  assert.equal(guard(reqOf({ host: '127.0.0.1' })), true)
+  assert.equal(rejections.length, 0)
+  // A genuinely foreign default-port origin is still rejected.
+  const { guard: g2, rejections: r2 } = makeGuard(() => 80)
+  assert.equal(g2(reqOf({ origin: 'http://10.0.0.9' })), false)
+  assert.equal(r2.at(-1).obj.code, 'bad_origin')
 })
 
 test('safeTokenEqual fails closed and never leaks length by timing', () => {

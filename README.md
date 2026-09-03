@@ -49,7 +49,7 @@ Peer 配置是单向的；需要双向可见时，两端分别配置对方。远
 
 - 本地 API 拒绝跨站 Origin、非 loopback Host 和不安全的 Fetch Metadata。
 - 写操作仅接受 POST；端口必须是 1–65535 的十进制整数。
-- 非 loopback 请求必须携带 Fleet Bearer token；缺少或无法解析时拒绝。
+- 是否需要 Fleet Bearer 由**真实 TCP 对端地址（socket）**判定，而非仅看 Host 头：对端非回环**或** Host 非回环，二者满足其一即要求 bearer。伪造 `Host: 127.0.0.1` 无法隐藏非回环对端；对端地址缺失时直接拒绝。缺少或无法解析 token 时拒绝。
 - Fleet token 没有操作级权限划分。持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
 - SSE 仅向本机开放。
 

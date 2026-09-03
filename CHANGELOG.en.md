@@ -3,6 +3,14 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### Fixed
+
+- The request guard now decides locality from the TCP peer address. DSH supports listening on `0.0.0.0`, so a remote source forging `Host: 127.0.0.1` previously passed the guard and skipped the fleet bearer, reaching start / stop / stop-all / stop-self.
+- A missing or blank peer address is rejected as unidentified instead of being treated as local.
+- With the service on the default HTTP port 80, a same-origin Origin that omits the port (such as `http://127.0.0.1`) is no longer rejected as cross-origin.
+
 ## 0.9.4 - 2026-09-02
 
 ### Changed
