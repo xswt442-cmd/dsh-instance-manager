@@ -137,18 +137,21 @@ jobs:
             Get-Content $launchErr -ErrorAction SilentlyContinue
             Write-Error "dsh web did not become ready"
           }
-          $launchText = (Get-Content $launchOut -Raw -ErrorAction SilentlyContinue) + (Get-Content $launchErr -Raw -ErrorAction SilentlyContinue)
-          $launchUrl = [regex]::Match($launchText, 'http://127\.0\.0\.1:3129/\?token=[^\s\)]+').Value
           $cookieJar = Join-Path $env:RUNNER_TEMP 'dsh-cookies.txt'
           $shellFile = Join-Path $env:RUNNER_TEMP 'dsh-shell.html'
-          $cookieArgs = @()
-          if ($launchUrl) {
-            & curl.exe -s -L --noproxy '*' -c $cookieJar $launchUrl -o $shellFile
-            if ($LASTEXITCODE -ne 0) { Write-Error 'failed to exchange launch token for browser cookie' }
-            $cookieArgs = @('-b', $cookieJar)
-          } else {
-            & curl.exe -fsS --noproxy '*' "http://127.0.0.1:3129/" -o $shellFile
+          $shellReady = $false
+          $shellCode = '000'
+          for ($i = 0; $i -lt 15 -and -not $shellReady; $i++) {
+            $launchText = [string](Get-Content $launchOut -Raw -ErrorAction SilentlyContinue) + [string](Get-Content $launchErr -Raw -ErrorAction SilentlyContinue)
+            $token = [regex]::Match($launchText, '[?&]token=([^&\s\)]+)').Groups[1].Value
+            $launchUrl = 'http://127.0.0.1:3129/'
+            if ($token) { $launchUrl += "?token=$token" }
+            $shellCode = & curl.exe -sS -L --noproxy '*' -c $cookieJar -b $cookieJar -o $shellFile -w '%{http_code}' $launchUrl
+            if ($LASTEXITCODE -eq 0 -and $shellCode -eq '200') { $shellReady = $true; break }
+            Start-Sleep -Seconds 1
           }
+          if (-not $shellReady) { Write-Error "failed to authenticate web shell: HTTP $shellCode" }
+          $cookieArgs = @('-b', $cookieJar)
           function ApiJson([string]$method, [string]$url) {
             $raw = & curl.exe -s --noproxy '*' -X $method @cookieArgs $url
             return $raw | ConvertFrom-Json
@@ -234,15 +237,20 @@ jobs:
             kill "$pid" 2>/dev/null || true
             exit 1
           fi
-          launch_url=$(sed -n 's#.*\(http://127\.0\.0\.1:3129/?token=[^ )]*\).*#\1#p' "$launch_log" | head -n 1)
+          cookie_jar="$RUNNER_TEMP/dsh-cookies.txt"
           shell_html="$RUNNER_TEMP/dsh-shell.html"
-          if [ -n "$launch_url" ]; then
-            cookie_jar="$RUNNER_TEMP/dsh-cookies.txt"
-            curl -fsS -L --noproxy '*' -c "$cookie_jar" "$launch_url" -o "$shell_html"
-            cookie_args=(-b "$cookie_jar")
-          else
-            curl -fsS --noproxy '*' "http://127.0.0.1:3129/" -o "$shell_html"
-          fi
+          shell_ready=0
+          shell_code=000
+          for i in $(seq 15); do
+            token=$(sed -n 's/.*[?&]token=\([^&[:space:])]*\).*/\1/p' "$launch_log" | tail -n 1)
+            launch_url='http://127.0.0.1:3129/'
+            [ -n "$token" ] && launch_url="${launch_url}?token=${token}"
+            shell_code=$(curl -sS -L --noproxy '*' -c "$cookie_jar" -b "$cookie_jar" -o "$shell_html" -w '%{http_code}' "$launch_url" || true)
+            [ "$shell_code" = 200 ] && { shell_ready=1; break; }
+            sleep 1
+          done
+          [ "$shell_ready" = 1 ] || { echo "::error::failed to authenticate web shell: HTTP $shell_code"; cat "$launch_log"; kill "$pid" 2>/dev/null || true; exit 1; }
+          cookie_args=(-b "$cookie_jar")
           curl -s --noproxy '*' "${cookie_args[@]}" "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
             || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }
           # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
