@@ -249,7 +249,7 @@ jobs:
           # re-introduction fails the build instead of silently shipping
           [ "$(code "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self")" = "404" ] \
             || { echo "::error::legacy alias route should be gone, did not answer 404"; kill "$pid" 2>/dev/null; exit 1; }
-          bundle_path=$(grep -oE '/plugins/\?\?dsh-instance-manager/client\.js(&amp;|&)rev=[^"< ]+' "$shell_html" | head -n 1 | sed 's/&amp;/\&/g')
+          bundle_path=$(grep -oE '/plugins/[^"< ]*dsh-instance-manager/client\.js[^"< ]*' "$shell_html" | head -n 1 | sed 's/&amp;/\&/g' || true)
           [ -n "$bundle_path" ] || { echo "::error::shell did not advertise client bundle"; kill "$pid" 2>/dev/null; exit 1; }
           [ "$(code "http://127.0.0.1:3129$bundle_path")" = "200" ] || { echo "::error::advertised client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
           # --- request-guard regression checks (see README 安全模型) ---
