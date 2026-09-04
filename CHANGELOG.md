@@ -5,9 +5,16 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ## Unreleased
 
+### 变更
+
+- 适配 DSH 0.1.2-rc.1 的 Connection 鉴权：浏览器 API 与 SSE 使用签名 cookie，内部实例探测保留严格 loopback 通道；Connection 拒绝或卸载时不再降级放行。
+- 网页面板启动的新实例会打开 DSH 的一次性 token URL 完成 cookie 交接；Agent 工具启动仍使用 `--no-open`，并统一采用显式 `--profile web` 参数。
+- 面板语言跟随 DSH 全局 locale，移除独立的 `dshim-lang` localStorage 偏好与语言按钮；旧 DSH 仍按浏览器语言降级。
+- 兼容检查显式覆盖 `0.1.2-rc.1` 与 latest。
+
 ### 修复
 
-- 请求守卫改用 TCP 对端地址判定本地性。DSH 支持监听 `0.0.0.0`，此前远端来源伪造 `Host: 127.0.0.1` 即可通过守卫并绕过 fleet bearer，执行 start / stop / stop-all / stop-self。
+- 请求守卫改用 TCP 对端地址判定本地性。对于旧版或自定义的远程监听，此前远端来源伪造 `Host: 127.0.0.1` 即可通过守卫并绕过 fleet bearer，执行 start / stop / stop-all / stop-self。
 - 对端地址缺失或为空白时按未知来源拒绝，不再视为本地请求。
 - 服务运行在 HTTP 默认端口 80 时，省略端口的同源 Origin（如 `http://127.0.0.1`）不再被误判为跨源。
 

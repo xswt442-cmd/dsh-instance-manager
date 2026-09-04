@@ -5,9 +5,16 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+### Changed
+
+- Adapted browser API and SSE authentication to the DSH 0.1.2-rc.1 Connection signed cookie. Private instance probes retain a strict loopback path, and Connection rejection or disposal never falls back open.
+- Instances started from the web panel now open DSH's one-time token URL to complete the cookie handoff. Agent-tool starts retain `--no-open`, and both paths use explicit `--profile web` arguments.
+- The panel now follows the global DSH locale. The private `dshim-lang` localStorage preference and language button are removed; older DSH builds fall back to the browser language.
+- Compatibility checks now pin `0.1.2-rc.1` alongside latest.
+
 ### Fixed
 
-- The request guard now decides locality from the TCP peer address. DSH supports listening on `0.0.0.0`, so a remote source forging `Host: 127.0.0.1` previously passed the guard and skipped the fleet bearer, reaching start / stop / stop-all / stop-self.
+- The request guard now decides locality from the TCP peer address. On older or custom remote-listening deployments, a remote source forging `Host: 127.0.0.1` previously passed the guard and skipped the fleet bearer, reaching start / stop / stop-all / stop-self.
 - A missing or blank peer address is rejected as unidentified instead of being treated as local.
 - With the service on the default HTTP port 80, a same-origin Origin that omits the port (such as `http://127.0.0.1`) is no longer rejected as cross-origin.
 

@@ -61,11 +61,12 @@ jobs:
           if ($client -notmatch [regex]::Escape($dockPlacements)) { Write-Error 'lib/client.js embedded dock placements diverged from lib/shared.js' }
 
   boot-check:
-    name: boot dsh web with bundle (${{ matrix.os }})
+    name: boot dsh web with bundle (${{ matrix.os }}, dsh${{ matrix.dsh-spec }})
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
+        dsh-spec: ['@0.1.2-rc.1', '@latest']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -73,7 +74,7 @@ jobs:
         with:
           node-version: 24
       - name: install dsh
-        run: npm i -g @deepseek-ai/dsh
+        run: npm i -g "@deepseek-ai/dsh${{ matrix.dsh-spec }}"
       - name: register bundle into a temp profile (windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -122,7 +123,9 @@ jobs:
           $globalRoot = (& npm root -g).Trim()
           $dshBin = Join-Path $globalRoot "@deepseek-ai\dsh\lib\bin.js"
           if (-not (Test-Path $dshBin)) { Write-Error "dsh bin not found at $dshBin" }
-          $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", "web", "--port", "3129" -WindowStyle Hidden -PassThru
+          $launchOut = Join-Path $env:RUNNER_TEMP 'dsh-launch.out.log'
+          $launchErr = Join-Path $env:RUNNER_TEMP 'dsh-launch.err.log'
+          $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", "--profile", "web", "--no-open", "--port", "3129" -RedirectStandardOutput $launchOut -RedirectStandardError $launchErr -WindowStyle Hidden -PassThru
           $ready = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 1
@@ -130,17 +133,38 @@ jobs:
             if ($p.HasExited) { break }
           }
           if (-not $ready) { Write-Error "dsh web did not become ready" }
-          $api = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" -UseBasicParsing -TimeoutSec 5
-          if ($api.Content -notmatch '"items"') { Write-Error "manager api returned unexpected payload" }
+          $launchText = (Get-Content $launchOut -Raw -ErrorAction SilentlyContinue) + (Get-Content $launchErr -Raw -ErrorAction SilentlyContinue)
+          $launchUrl = [regex]::Match($launchText, 'http://127\.0\.0\.1:3129/\?token=[^\s\)]+').Value
+          $cookieJar = Join-Path $env:RUNNER_TEMP 'dsh-cookies.txt'
+          $shellFile = Join-Path $env:RUNNER_TEMP 'dsh-shell.html'
+          $cookieArgs = @()
+          if ($launchUrl) {
+            & curl.exe -s -L --noproxy '*' -c $cookieJar $launchUrl -o $shellFile
+            if ($LASTEXITCODE -ne 0) { Write-Error 'failed to exchange launch token for browser cookie' }
+            $cookieArgs = @('-b', $cookieJar)
+          } else {
+            & curl.exe -fsS --noproxy '*' "http://127.0.0.1:3129/" -o $shellFile
+          }
+          function ApiJson([string]$method, [string]$url) {
+            $raw = & curl.exe -s --noproxy '*' -X $method @cookieArgs $url
+            return $raw | ConvertFrom-Json
+          }
+          $api = ApiJson GET "http://127.0.0.1:3129/dsh-instance-manager/api?action=list"
+          if ($null -eq $api.items) { Write-Error "manager api returned unexpected payload" }
           # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
           # re-introduction fails the build instead of silently shipping
           $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" -UseBasicParsing -TimeoutSec 5 -SkipHttpErrorCheck
           if ($legacy.StatusCode -ne 404) { Write-Error "legacy alias route should be gone, answered $($legacy.StatusCode)" }
-          $client = Invoke-WebRequest -Uri "http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js" -UseBasicParsing -TimeoutSec 5
-          if ($client.StatusCode -ne 200) { Write-Error "client bundle not served" }
+          $shellHtml = Get-Content $shellFile -Raw
+          $advertised = [regex]::Match($shellHtml, '["''](/?plugins/[^"'']*dsh-instance-manager/client\.js[^"'']*)["'']')
+          if (-not $advertised.Success) { Write-Error 'shell did not advertise the client bundle' }
+          $bundlePath = [System.Net.WebUtility]::HtmlDecode($advertised.Groups[1].Value)
+          if (-not $bundlePath.StartsWith('/')) { $bundlePath = "/$bundlePath" }
+          $clientCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' @cookieArgs "http://127.0.0.1:3129$bundlePath"
+          if ($clientCode -ne '200') { Write-Error "advertised client bundle not served" }
           # --- request-guard regression checks (see README 安全模型) ---
           function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
-            & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @curlArgs $url
+            & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @cookieArgs @curlArgs $url
           }
           $b = "http://127.0.0.1:3129/dsh-instance-manager/api"
           if ((ApiCode GET "$b`?action=start") -ne '405') { Write-Error 'guard regression: GET start must be 405' }
@@ -154,30 +178,30 @@ jobs:
           if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
           if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
           # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
-          $start = Invoke-RestMethod -Method Post -Uri "$b`?action=start" -TimeoutSec 60
+          $start = ApiJson POST "$b`?action=start"
           if (-not $start.ok -or -not $start.pid) { Write-Error "start read-back failed: $($start | ConvertTo-Json -Compress)" }
           if ((ApiCode GET "http://127.0.0.1:$($start.port)/") -ne '200') { Write-Error "started instance unreachable on :$($start.port)" }
           # --- sessions summary: self + forwarded to the fresh instance ---
-          $selfSess = Invoke-RestMethod -Uri "$b`?action=sessions" -TimeoutSec 15
+          $selfSess = ApiJson GET "$b`?action=sessions"
           if (-not $selfSess.ok) { Write-Error 'self sessions summary failed' }
-          $fwdSess = Invoke-RestMethod -Uri "$b`?action=sessions&port=$($start.port)" -TimeoutSec 20
+          $fwdSess = ApiJson GET "$b`?action=sessions&port=$($start.port)"
           if (-not $fwdSess.ok) { Write-Error "forwarded sessions failed: $($fwdSess | ConvertTo-Json -Compress)" }
           # --- log read: the fresh instance, plus the peer-param rules that
           # --- silently broke every local read in 0.9.0 (peer=undefined) ---
-          $log = Invoke-RestMethod -Uri "$b`?action=logs&port=$($start.port)" -TimeoutSec 20
+          $log = ApiJson GET "$b`?action=logs&port=$($start.port)"
           if (-not $log.ok) { Write-Error "log read failed: $($log | ConvertTo-Json -Compress)" }
-          $sentinel = Invoke-RestMethod -Uri "$b`?action=logs&port=$($start.port)&peer=undefined" -TimeoutSec 20
+          $sentinel = ApiJson GET "$b`?action=logs&port=$($start.port)&peer=undefined"
           if (-not $sentinel.ok) { Write-Error "peer=undefined must mean no peer: $($sentinel | ConvertTo-Json -Compress)" }
           if ((ApiCode GET "$b`?action=logs&port=$($start.port)&peer=nope") -ne '400') { Write-Error 'unknown peer must be 400, not a local fallback' }
           # --- SSE endpoint answers as an event stream ---
           $evBase = $b -replace '/api$', ''
-          $evReq = [System.Net.WebRequest]::Create("$evBase/events")
-          $evResp = $evReq.GetResponse()
-          try { if ($evResp.ContentType -notlike 'text/event-stream*') { Write-Error "unexpected SSE content type: $($evResp.ContentType)" } } finally { $evResp.Close() }
+          $evHeaders = Join-Path $env:RUNNER_TEMP 'dshim-ev-headers.txt'
+          & curl.exe -s --noproxy '*' @cookieArgs --max-time 2 -o NUL -D $evHeaders "$evBase/events"
+          if ((Get-Content $evHeaders -Raw) -notmatch 'text/event-stream') { Write-Error 'SSE endpoint missing' }
           # --- fleet link fails closed without a token (F1/F2 regression) ---
           $linkCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link"
           if ($linkCode -ne '403') { Write-Error "fleet link must fail closed without a token (got $linkCode)" }
-          $null = Invoke-RestMethod -Method Post -Uri "$b`?action=stop&port=$($start.port)" -TimeoutSec 30
+          $null = ApiJson POST "$b`?action=stop&port=$($start.port)"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Write-Host "compat check passed"
       - name: boot dsh web on 3129 (linux)
@@ -189,9 +213,11 @@ jobs:
           globalRoot="$(npm root -g)"
           dshBin="$globalRoot/@deepseek-ai/dsh/lib/bin.js"
           [ -f "$dshBin" ] || { echo "::error::dsh bin not found at $dshBin"; exit 1; }
-          node "$dshBin" web --port 3129 &
+          launch_log="$RUNNER_TEMP/dsh-launch.log"
+          node "$dshBin" --profile web --no-open --port 3129 >"$launch_log" 2>&1 &
           pid=$!
-          code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "$@"; }
+          cookie_args=()
+          code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "${cookie_args[@]}" "$@"; }
           ready=0
           for i in $(seq 60); do
             sleep 1
@@ -203,14 +229,24 @@ jobs:
             kill "$pid" 2>/dev/null || true
             exit 1
           fi
-          curl -s --noproxy '*' "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
+          launch_url=$(sed -n 's#.*\(http://127\.0\.0\.1:3129/?token=[^ )]*\).*#\1#p' "$launch_log" | head -n 1)
+          shell_html="$RUNNER_TEMP/dsh-shell.html"
+          if [ -n "$launch_url" ]; then
+            cookie_jar="$RUNNER_TEMP/dsh-cookies.txt"
+            curl -fsS -L --noproxy '*' -c "$cookie_jar" "$launch_url" -o "$shell_html"
+            cookie_args=(-b "$cookie_jar")
+          else
+            curl -fsS --noproxy '*' "http://127.0.0.1:3129/" -o "$shell_html"
+          fi
+          curl -s --noproxy '*' "${cookie_args[@]}" "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
             || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }
           # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
           # re-introduction fails the build instead of silently shipping
           [ "$(code "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self")" = "404" ] \
             || { echo "::error::legacy alias route should be gone, did not answer 404"; kill "$pid" 2>/dev/null; exit 1; }
-          [ "$(code http://127.0.0.1:3129/plugins/dsh-instance-manager/client.js)" = "200" ] \
-            || { echo "::error::client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
+          bundle_path=$(grep -oE '/plugins/\?\?dsh-instance-manager/client\.js(&amp;|&)rev=[^"< ]+' "$shell_html" | head -n 1 | sed 's/&amp;/\&/g')
+          [ -n "$bundle_path" ] || { echo "::error::shell did not advertise client bundle"; kill "$pid" 2>/dev/null; exit 1; }
+          [ "$(code "http://127.0.0.1:3129$bundle_path")" = "200" ] || { echo "::error::advertised client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
           # --- request-guard regression checks (see README 安全模型) ---
           b="http://127.0.0.1:3129/dsh-instance-manager/api"
           [ "$(code -X GET "$b?action=start")" = "405" ] || { echo "::error::guard regression: GET start must be 405"; exit 1; }
@@ -224,26 +260,26 @@ jobs:
           [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
           [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
           # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
-          start_json=$(curl -s --noproxy '*' -X POST "$b?action=start" --max-time 60)
+          start_json=$(curl -s --noproxy '*' "${cookie_args[@]}" -X POST "$b?action=start" --max-time 60)
           echo "$start_json" | grep -q '"pid"' || { echo "::error::start read-back failed: $start_json"; kill "$pid" 2>/dev/null || true; exit 1; }
           new_port=$(printf '%s' "$start_json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).port||''))}catch(e){}})")
           [ -n "$new_port" ] || { echo "::error::start returned no usable port"; kill "$pid" 2>/dev/null || true; exit 1; }
           [ "$(code "http://127.0.0.1:$new_port/")" = "200" ] || { echo "::error::started instance unreachable on :$new_port"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- sessions summary: self + forwarded to the fresh instance ---
-          curl -s --noproxy '*' --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
-          curl -s --noproxy '*' --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' "${cookie_args[@]}" --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- log read: the fresh instance, plus the peer-param rules that
           # --- silently broke every local read in 0.9.0 (peer=undefined) ---
-          curl -s --noproxy '*' --max-time 20 "$b?action=logs&port=$new_port" | grep -q '"ok":true' || { echo "::error::log read failed"; kill "$pid" 2>/dev/null || true; exit 1; }
-          curl -s --noproxy '*' --max-time 20 "$b?action=logs&port=$new_port&peer=undefined" | grep -q '"ok":true' || { echo "::error::peer=undefined must mean no peer"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=logs&port=$new_port" | grep -q '"ok":true' || { echo "::error::log read failed"; kill "$pid" 2>/dev/null || true; exit 1; }
+          curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=logs&port=$new_port&peer=undefined" | grep -q '"ok":true' || { echo "::error::peer=undefined must mean no peer"; kill "$pid" 2>/dev/null || true; exit 1; }
           [ "$(code -X GET "$b?action=logs&port=$new_port&peer=nope")" = "400" ] || { echo "::error::unknown peer must be 400, not a local fallback"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- SSE endpoint answers as an event stream ---
           ev_root="${b%/api}"
-          curl -s --noproxy '*' --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true
+          curl -s --noproxy '*' "${cookie_args[@]}" --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true
           grep -qi 'text/event-stream' /tmp/dshim-ev-h.txt || { echo "::error::SSE endpoint missing"; kill "$pid" 2>/dev/null || true; exit 1; }
           # --- fleet link fails closed without a token (F1/F2 regression) ---
           link_code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link")
           [ "$link_code" = "403" ] || { echo "::error::fleet link must fail closed without a token (got $link_code)"; kill "$pid" 2>/dev/null || true; exit 1; }
-          curl -s --noproxy '*' -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
+          curl -s --noproxy '*' "${cookie_args[@]}" -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null
           kill "$pid" 2>/dev/null || true
           echo "compat check passed"

@@ -13,6 +13,7 @@
 - 列出实例的端口、PID、运行时长、会话数、内存和版本状态。
 - 查看 stdout/stderr 日志、内存趋势和活跃会话概要。
 - 启动新实例；优雅停止单个、当前或全部本地实例。
+- 在 DSH 0.1.2-rc.1+ 中，网页启动会打开一次性 token URL，让新实例安全换取浏览器 cookie；Agent 工具启动保持后台无窗口。
 - 通过受认证的 peer 链路查看远程实例、日志和会话。
 - 提供 `instance_list`、`instance_start`、`instance_stop`、`instance_logs` 和 `instance_sessions` Agent 工具。
 
@@ -35,6 +36,8 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 可在 DSH settings 中配置 Dock 位置、刷新间隔、Fleet token、peers 和启动端口段。对应的环境变量可作为默认值：
 
+界面语言跟随 DSH Settings → General 的全局语言，不再维护插件自己的语言偏好。
+
 ```powershell
 $env:DSHIM_DOCK_PLACEMENT = 'main-bottom-left'
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'
@@ -51,6 +54,7 @@ Peer 配置是单向的；需要双向可见时，两端分别配置对方。远
 - 写操作仅接受 POST；端口必须是 1–65535 的十进制整数。
 - 是否需要 Fleet Bearer 由**真实 TCP 对端地址（socket）**判定，而非仅看 Host 头：对端非回环**或** Host 非回环，二者满足其一即要求 bearer。伪造 `Host: 127.0.0.1` 无法隐藏非回环对端；对端地址缺失时直接拒绝。缺少或无法解析 token 时拒绝。
 - Fleet token 没有操作级权限划分。持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
+- 浏览器 API 与事件流在 DSH 0.1.2-rc.1+ 中复用 Connection 的签名 cookie；内部实例确认与转发只走严格 loopback 探测动作。
 - SSE 仅向本机开放。
 
 ## 开发

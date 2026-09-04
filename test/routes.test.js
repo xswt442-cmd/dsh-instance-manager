@@ -21,7 +21,7 @@ const API_PATH = '/dsh-instance-manager/api'
 const EVENTS_PATH = '/dsh-instance-manager/events'
 const LINK_PATH = '/dsh-instance-manager/link'
 
-const mount = ({ upgradeSupport = true } = {}) => {
+const mount = ({ upgradeSupport = true, connection } = {}) => {
   const routes = []
   const upgrades = []
   const getCalls = []
@@ -57,6 +57,16 @@ const mount = ({ upgradeSupport = true } = {}) => {
       if (!listeners.has(event)) listeners.set(event, new Set())
       listeners.get(event).add(fn)
       return () => { listeners.get(event).delete(fn) }
+    },
+    inject: (names, fn) => {
+      if (!connection || !names.includes('connection')) return
+      fn({
+        connection,
+        on: (event, cb) => {
+          if (event === 'dispose') disposers.push(cb)
+          return () => {}
+        }
+      })
     }
   }
   plugin.apply(ctx)
@@ -72,6 +82,31 @@ const mount = ({ upgradeSupport = true } = {}) => {
   }
 }
 
+const callMountedRoute = async ({ connection, path = API_PATH, query = 'action=list', method = 'GET' }) => {
+  const { routes, dispose } = mount({ connection })
+  try {
+    const route = routes.find((r) => r.path === path)
+    let status = 0
+    let body = ''
+    const res = {
+      writeHead: (code) => { status = code },
+      write: () => {},
+      end: (chunk) => { body = chunk || '' },
+      on: () => {}
+    }
+    await route.handler({
+      url: path + (query ? '?' + query : ''),
+      method,
+      headers: { host: '127.0.0.1' },
+      socket: { remoteAddress: '127.0.0.1' },
+      on: () => {}
+    }, res)
+    return { status, json: body ? JSON.parse(body) : null }
+  } finally {
+    dispose()
+  }
+}
+
 const paths = (routes) => routes.map((r) => r.path)
 
 test('host registers the JSON api and the SSE stream, and nothing else', () => {
@@ -82,6 +117,37 @@ test('host registers the JSON api and the SSE stream, and nothing else', () => {
   } finally {
     dispose()
   }
+})
+
+test('RC1 Connection rejection is final for browser API actions', async () => {
+  const calls = []
+  const result = await callMountedRoute({
+    connection: { requestRejection: (req) => { calls.push(req.url); return 401 } }
+  })
+  assert.equal(result.status, 401)
+  assert.equal(result.json.code, 'unauthorized')
+  assert.equal(calls.length, 1)
+})
+
+test('private sibling probes bypass Connection but browser sessions do not', async () => {
+  let calls = 0
+  const connection = { requestRejection: () => { calls += 1; return 401 } }
+  const probe = await callMountedRoute({ connection, query: 'action=probe-sessions' })
+  assert.equal(probe.status, 200)
+  assert.equal(probe.json.ok, true)
+  assert.equal(calls, 0)
+  const browser = await callMountedRoute({ connection, query: 'action=sessions' })
+  assert.equal(browser.status, 401)
+  assert.equal(calls, 1)
+})
+
+test('RC1 Connection acceptance authorizes the SSE stream', async () => {
+  const result = await callMountedRoute({
+    connection: { requestRejection: () => undefined },
+    path: EVENTS_PATH,
+    query: ''
+  })
+  assert.equal(result.status, 200)
 })
 
 test('host mounts the fleet link upgrade route (fleet queries would time out without it)', () => {
@@ -195,8 +261,8 @@ const callApi = async (query, method = 'GET') => {
 
 // Full control over the request: forge an off-loopback socket peer, set a
 // bearer, or drop the socket entirely to exercise the trust-boundary gates.
-const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {} }) => {
-  const { routes, dispose } = mount()
+const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {}, connection }) => {
+  const { routes, dispose } = mount({ connection })
   try {
     const route = routes.find((r) => r.path === API_PATH)
     let status = 0
@@ -369,6 +435,25 @@ test('a configured fleet token unlocks the remote mode for an off-loopback peer'
     else process.env.DSHIM_FLEET_TOKEN = savedToken
     fs.rmSync(home, { recursive: true, force: true })
   }
+})
+
+test('an RC1 trusted-host browser uses Connection without becoming a fleet peer', async () => {
+  let checked = 0
+  const r = await callApiFull({
+    query: 'action=list',
+    host: 'lab.internal:3080',
+    remoteAddress: '192.0.2.50',
+    connection: {
+      requestRejection(req) {
+        checked += 1
+        assert.equal(req.headers.host, 'lab.internal:3080')
+        return undefined
+      }
+    }
+  })
+  assert.equal(r.status, 200)
+  assert.ok(Array.isArray(r.json.items))
+  assert.equal(checked, 1)
 })
 
 test('loopback peers (127.0.0.1, ::1, ::ffff:127.0.0.1) need no bearer', async () => {

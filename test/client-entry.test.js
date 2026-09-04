@@ -8,6 +8,7 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   let styleElement = null
   let dockRoot = null
   const registered = []
+  let localeNamespace = null
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
   const makeElement = () => ({
     style: { setProperty() {} },
@@ -60,6 +61,21 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
     // leave the panel silently absent. It waits through ctx.inject instead.
     inject(names, mount) {
       injected = names
+      if (Array.from(names).indexOf('locale') !== -1) {
+        mount({
+          locale: {
+            register(namespace, dictionaries) {
+              localeNamespace = namespace
+              assert.equal(typeof dictionaries.zh.appTitle, 'string')
+              return () => {}
+            },
+            getSnapshot: () => ({ active: 'zh' }),
+            subscribe: () => () => {}
+          },
+          on() {}
+        })
+        return
+      }
       if (Array.from(names).indexOf('settingsScope') !== -1) {
         // Benign binder: an unavailable namespace keeps the localStorage value.
         mount({
@@ -79,6 +95,8 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   assert.equal(Array.isArray(injected), true)
   assert.deepEqual(Array.from(injected), ['settingsScope'],
     'the settings binding is injected last; the slots injection above already ran')
+  assert.equal(localeNamespace, 'dsh-instance-manager')
+  assert.doesNotMatch(source, /dshim-lang/, 'language persistence belongs to DSH locale')
 
   assert.deepEqual(registered.map(entry => entry.options.id), [
     'instance-manager-panel',

@@ -13,6 +13,7 @@ View, start, and stop local DSH Web instances, with optional access to trusted r
 - List instance ports, PIDs, uptime, sessions, memory, and version status.
 - Inspect stdout/stderr logs, memory trends, and active-session summaries.
 - Start new instances and gracefully stop one, the current instance, or all local instances.
+- On DSH 0.1.2-rc.1+, web-panel starts open the one-time token URL so the new instance can issue its browser cookie; agent-tool starts remain headless.
 - View remote instances, logs, and sessions through authenticated peer links.
 - Expose the `instance_list`, `instance_start`, `instance_stop`, `instance_logs`, and `instance_sessions` agent tools.
 
@@ -35,6 +36,8 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 DSH settings control Dock placement, refresh interval, fleet token, peers, and the launch port band. Environment variables provide defaults:
 
+The UI language follows the global DSH Settings → General language; the plugin no longer stores a separate language preference.
+
 ```powershell
 $env:DSHIM_DOCK_PLACEMENT = 'main-bottom-left'
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'
@@ -51,6 +54,7 @@ Peer configuration is directional; configure each side when both machines should
 - Mutating actions are POST-only; ports must be decimal integers from 1 to 65535.
 - Whether a fleet bearer is required is decided by the **real TCP peer address (socket), not just the Host header**: an off-loopback peer OR an off-loopback Host triggers the bearer. A forged `Host: 127.0.0.1` cannot hide an off-loopback peer, and a missing peer address is rejected outright. Requests fail closed when the token is missing or unresolved.
 - The fleet token has no action-level scopes. A holder can start or stop local instances and read session information, so grant it only to trusted devices.
+- On DSH 0.1.2-rc.1+, browser APIs and event streams reuse the Connection signed cookie; instance confirmation and forwarding use private strict-loopback probes.
 - SSE remains local-only.
 
 ## Development

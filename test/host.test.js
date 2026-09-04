@@ -25,7 +25,8 @@ import {
   managedLocalPorts,
   diffManagedPorts,
   parsePortRange,
-  safeTokenEqual
+  safeTokenEqual,
+  buildDshLaunchArgs
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -33,6 +34,15 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 test('VERSION constant stays in lockstep with package.json', () => {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
   assert.equal(VERSION, pkg.version)
+})
+
+test('RC1 launch args split browser token handoff from headless agent starts', () => {
+  const ui = buildDshLaunchArgs('C:/dsh/lib/bin.js', 3090, { browserHandoff: true })
+  const agent = buildDshLaunchArgs('C:/dsh/lib/bin.js', 3090)
+  assert.deepEqual(ui.slice(-4), ['--profile', 'web', '--port', '3090'])
+  assert.equal(ui.includes('--no-open'), false, 'browser start must open the one-time token URL')
+  assert.equal(agent.includes('--no-open'), true, 'agent start must remain headless')
+  assert.ok(agent.indexOf('--profile') < agent.indexOf('--no-open'))
 })
 
 test('isLoopbackName accepts every documented loopback name', () => {
