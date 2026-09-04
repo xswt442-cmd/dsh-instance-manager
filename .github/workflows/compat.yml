@@ -129,10 +129,14 @@ jobs:
           $ready = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 1
-            try { $r = Invoke-WebRequest -Uri "http://127.0.0.1:3129/" -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}
+            try { $r = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-instance-manager/api?action=self" -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}
             if ($p.HasExited) { break }
           }
-          if (-not $ready) { Write-Error "dsh web did not become ready" }
+          if (-not $ready) {
+            Get-Content $launchOut -ErrorAction SilentlyContinue
+            Get-Content $launchErr -ErrorAction SilentlyContinue
+            Write-Error "dsh web did not become ready"
+          }
           $launchText = (Get-Content $launchOut -Raw -ErrorAction SilentlyContinue) + (Get-Content $launchErr -Raw -ErrorAction SilentlyContinue)
           $launchUrl = [regex]::Match($launchText, 'http://127\.0\.0\.1:3129/\?token=[^\s\)]+').Value
           $cookieJar = Join-Path $env:RUNNER_TEMP 'dsh-cookies.txt'
@@ -221,11 +225,12 @@ jobs:
           ready=0
           for i in $(seq 60); do
             sleep 1
-            [ "$(code http://127.0.0.1:3129/)" = "200" ] && { ready=1; break; }
+            [ "$(code 'http://127.0.0.1:3129/dsh-instance-manager/api?action=self')" = "200" ] && { ready=1; break; }
             kill -0 "$pid" 2>/dev/null || break
           done
           if [ "$ready" != "1" ]; then
             echo "::error::dsh web did not become ready"
+            cat "$launch_log" || true
             kill "$pid" 2>/dev/null || true
             exit 1
           fi
