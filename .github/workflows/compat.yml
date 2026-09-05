@@ -60,6 +60,31 @@ jobs:
           if ($shared -notmatch [regex]::Escape($dockPlacements)) { Write-Error 'lib/shared.js DOCK_PLACEMENTS literal drifted' }
           if ($client -notmatch [regex]::Escape($dockPlacements)) { Write-Error 'lib/client.js embedded dock placements diverged from lib/shared.js' }
 
+  # The loopback guard helpers must stay byte-identical across the three
+  # plugins (they drifted once and all three shipped different security
+  # behaviour). Each repo carries the checker and verifies its two peers.
+  guard-parity:
+    name: shared guard parity (cross-repo)
+    runs-on: ubuntu-latest
+    steps:
+      # Uniform layout: DSH_PLUGINS_ROOT must contain the three repos as named
+      # subdirectories, so this repo also checks out under its own name.
+      - uses: actions/checkout@v5
+        with:
+          path: dsh-instance-manager
+      - uses: actions/checkout@v5
+        with:
+          repository: xswt442-cmd/dsh-treekeeper
+          path: dsh-treekeeper
+      - uses: actions/checkout@v5
+        with:
+          repository: xswt442-cmd/dsh-ballast
+          path: dsh-ballast
+      - name: compare shared guard helpers across repos
+        run: node dsh-instance-manager/scripts/guard-parity.mjs
+        env:
+          DSH_PLUGINS_ROOT: ${{ github.workspace }}
+
   boot-check:
     name: boot dsh web with bundle (${{ matrix.os }}, dsh${{ matrix.dsh-spec }})
     strategy:
