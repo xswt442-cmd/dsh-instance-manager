@@ -91,13 +91,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        dsh-spec: ['@0.1.2-rc.1', '@latest']
-        # One ubuntu canary tracks the npm `alpha` dist-tag while the 0.1.3
-        # line is in prerelease (see testplace/DSH-013-ALPHA2-UPGRADE.md);
-        # drop it once 0.1.3 lands as `latest`.
-        include:
-          - os: ubuntu-latest
-            dsh-spec: '@alpha'
+        # Keep the oldest declared RC line explicit while validating the new
+        # release candidate independently from the moving latest channel.
+        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.1', '@latest']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
