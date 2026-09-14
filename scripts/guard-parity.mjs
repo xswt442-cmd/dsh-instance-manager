@@ -196,6 +196,11 @@ for (const [repo, tag] of repos) {
 
 // 3. Every decision must agree across the three. Codes differ by design, so only
 //    the verdict is compared.
+//
+//    First confirm each repo exports the guard it is expected to. A repo whose
+//    blocks failed to parse is already reported above; without this check the
+//    decision cases below would throw `mods[repo][factory] is not a function` and
+//    bury the real diagnosis under a stack trace.
 const makeRes = () => ({
   statusCode: null,
   body: null,
@@ -207,6 +212,17 @@ const makeRes = () => ({
 const mods = {}
 for (const [repo] of repos) {
   mods[repo] = await import(pathToFileURL(join(root, repo, 'lib', 'shared.js')).href)
+}
+
+const unusable = repos.filter(([repo, , factory]) => typeof mods[repo][factory] !== 'function')
+if (unusable.length) {
+  for (const [repo, tag, factory] of unusable) {
+    console.log(`FAIL ${tag}: lib/shared.js does not export a usable ${factory}() — the embedded blocks are stale or absent`)
+  }
+  failures += unusable.length
+  console.log('\ncannot compare decisions while a repo exports no guard')
+  console.log(failures ? `\n${failures} drift problem(s)` : '\nno drift')
+  process.exit(1)
 }
 
 // Each plugin names its own guard, so resolve it per repo. The guard is built
