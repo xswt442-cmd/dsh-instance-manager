@@ -30,16 +30,27 @@
 //     change: byte equality implies it, but only this proves each consumer
 //     actually routes through the blocks.
 //
-// Usage:  node scripts/guard-parity.mjs        (from a repo checkout, CI)
-//         DSH_PLUGINS_ROOT=<dir with the three repos> node scripts/guard-parity.mjs
+// Usage:  DSH_PLUGINS_ROOT=<dir with the three repos> node scripts/guard-parity.mjs
 //
 // `DSH_PLUGINS_ROOT` must point at a directory that contains
-// `dsh-instance-manager/`, `dsh-treekeeper/` and `dsh-ballast/`; it also exists
-// so the drift detection can be exercised against a deliberately-broken fixture
-// — a checker that has never failed is unproven. `--self-test` exercises the
-// extractor alone.
+// `dsh-instance-manager/`, `dsh-treekeeper/` and `dsh-ballast/`. `--self-test`
+// exercises the extractor alone.
 //
-// Exit code 0 = identical blocks, no private copies, and every decision agrees.
+// This is a LOCAL DIAGNOSTIC, deliberately not a CI gate. Per-repo CI already
+// proves the stronger local property — `loopback:check` / `guard:check` compare
+// each repo's embedded blocks against the `dist/` of the exact dock version it
+// pins, and that version is immutable on npm. Three repos pinning one version
+// therefore hold byte-identical blocks by construction, which is why this script
+// is redundant as a gate and was removed from the compat workflow.
+//
+// The property it asserts is inherently cross-repository and cannot hold at an
+// arbitrary moment: on a `dev` push the peer checkouts resolve to their default
+// branch, so a difference reported here may mean only that the peers are on
+// `main`. Run it when all three checkouts are on the same branch — before a
+// release, or after one — and read a failure as a real signal then.
+//
+// Exit code 0 = identical blocks, one shared dock pin, no private copies, and
+// every decision agrees.
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -90,6 +101,17 @@ const dropBlocks = (src) => {
   const lines = src.split(/\r?\n/)
   for (const { from, to } of spans) lines.splice(from, to - from + 1)
   return lines.join('\n')
+}
+
+// The dock version a repo embeds its blocks from. This is the one fact that is
+// genuinely cross-repository: the blocks themselves are proven locally against
+// whatever version is pinned here, and a version is immutable on npm, so equal
+// pins are what make the blocks equal — not the other way round.
+const dockPinOf = (repo) => {
+  const pkg = JSON.parse(readFileSync(join(root, repo, 'package.json'), 'utf8'))
+  const dev = (pkg.devDependencies || {})['dsh-mini-utility-dock']
+  const any = (pkg.dependencies || {})['dsh-mini-utility-dock']
+  return dev || any || null
 }
 
 if (process.argv.includes('--self-test')) {
@@ -146,6 +168,33 @@ for (const block of BLOCKS) {
   }
 }
 
+// 2. Every repo must embed from the same dock version. A skew here is the one
+//    cross-repo cause of divergence that per-repo checks cannot see: each repo's
+//    own `guard:check` passes against whatever it pins, so a repo left on an older
+//    dock stays green while its blocks differ from its siblings'.
+{
+  const pins = repos.map(([repo, tag]) => ({ tag, pin: dockPinOf(repo) }))
+  const unset = pins.filter((p) => p.pin === null)
+  const distinct = [...new Set(pins.map((p) => p.pin).filter((p) => p !== null))]
+  if (unset.length) {
+    console.log(`FAIL dock pin: not declared by ${unset.map((u) => u.tag).join(', ')}`)
+    failures++
+  } else if (distinct.length !== 1) {
+    console.log(`FAIL dock pin: versions differ — ${pins.map((p) => `${p.tag}=${p.pin}`).join(' ')}`)
+    failures++
+  } else {
+    // An exact pin is what makes the sibling repos hold identical blocks: a range
+    // could resolve to different builds under one declared value.
+    const exact = /^\d+\.\d+\.\d+$/.test(distinct[0])
+    if (!exact) {
+      console.log(`FAIL dock pin: ${JSON.stringify(distinct[0])} is not an exact version, so one declared value can resolve to different blocks`)
+      failures++
+    } else {
+      console.log(`ok   dock pin: all three embed dsh-mini-utility-dock ${distinct[0]}`)
+    }
+  }
+}
+
 // The guard block reads what the loopback block declares in the same file, so the
 // order is load-bearing, not cosmetic.
 {
@@ -164,7 +213,7 @@ for (const block of BLOCKS) {
   else console.log('ok   block order: the loopback predicates precede the host guard everywhere')
 }
 
-// 2. Embedding the blocks is worthless if a repo also keeps its own enforcement
+// 3. Embedding the blocks is worthless if a repo also keeps its own enforcement
 //    beside them. Policy is expected outside the blocks; decisions are not.
 //
 //    `remoteAddress` is deliberately NOT listed on its own: a plugin may keep a
@@ -194,7 +243,7 @@ for (const [repo, tag] of repos) {
   }
 }
 
-// 3. Every decision must agree across the three. Codes differ by design, so only
+// 4. Every decision must agree across the three. Codes differ by design, so only
 //    the verdict is compared.
 //
 //    First confirm each repo exports the guard it is expected to. A repo whose
@@ -300,7 +349,7 @@ for (const [label, req, expected] of cases) {
 if (bad) failures += bad
 else console.log(`ok   decisions: ${cases.length} cases agree across DIM/DTK/BAL`)
 
-// 4. Fleet mode is the one place the guard deliberately relaxes, and only DIM
+// 5. Fleet mode is the one place the guard deliberately relaxes, and only DIM
 //    opts in. Assert the relaxation stays bounded: a fleet guard still rejects a
 //    cross-site request, a foreign Origin, and a missing peer.
 const dimFleet = (req) => verdict('dsh-instance-manager', 'createGuard', { ...req, fleet: true })
@@ -322,7 +371,7 @@ for (const [label, req, expected] of fleetCases) {
 if (fleetBad) failures += fleetBad
 else console.log(`ok   fleet bounds: ${fleetCases.length} cases hold`)
 
-// 5. The predicates themselves, called directly, across every repo.
+// 6. The predicates themselves, called directly, across every repo.
 const predicateCases = [
   ['isLoopbackName', ['127.0.0.1', true], ['localhost', true], ['::1', true],
     ['LOCALHOST', true], ['[::1]', false], ['::ffff:127.0.0.1', true],
@@ -354,7 +403,7 @@ for (const [fn, ...fnCases] of predicateCases) {
   else console.log(`ok   ${fn}: ${fnCases.length} cases agree across DIM/DTK/BAL`)
 }
 
-// 6. portOf normalises the default ports, which is what stopped a same-origin
+// 7. portOf normalises the default ports, which is what stopped a same-origin
 //    request on 80/443 from reading as a foreign Origin.
 {
   let portBad = 0
@@ -373,7 +422,7 @@ for (const [fn, ...fnCases] of predicateCases) {
   else console.log(`ok   portOf: ${portCases.length} cases agree across DIM/DTK/BAL`)
 }
 
-// 7. An unknown policy key is a typo, and a typo would silently leave the default
+// 8. An unknown policy key is a typo, and a typo would silently leave the default
 //    in place, so the shared factory throws. A plugin that names its own policy
 //    must not swallow that — it should reach the caller.
 {
