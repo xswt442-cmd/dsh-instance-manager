@@ -3,6 +3,19 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.9.6 - 2026-09-14
+
+### 安全
+
+- 同源请求守卫改由 `dsh-mini-utility-dock` 的共享片段提供。此前三仓各自维护一份 `createGuard`，已漂移三次：三家都拒绝 IPv6 回环 `::1`；三家对 Host 拼写各执一词；未加方括号的 IPv6 Host（如 `::1:3080`，RFC 7230 禁止）曾静默跳过 Host 白名单。现由单一实现判定；本插件保留全部既有错误码与文案，`createGuard` 的调用方式与 fleet 模式语义均未改变。
+- 本插件此前在 loopback 白名单中列出 `::ffff:127.0.0.1`，但该字符串在 Origin 路径上无法命中：WHATWG URL 解析器会把 `[::ffff:127.0.0.1]` 规范化为 `[::ffff:7f00:1]`。该条目已由共享判定取代，两种拼写在 Host 与 Origin 两条路径上均视为回环。
+- Host 头存在但解析不出主机名时按非回环处理。此前该情形会跳过白名单校验。
+
+### 变更
+
+- 新增 `loopback:sync` / `loopback:check` 与 `guard:sync` / `guard:check` 脚本，用于同步并校验 `lib/shared.js` 中的两个生成片段；`npm test` 会校验其未漂移。
+- 依赖 `dsh-mini-utility-dock` 0.1.3，即首个包含上述片段的已发布版本。
+
 ## 0.9.5 - 2026-09-04
 
 ### 变更

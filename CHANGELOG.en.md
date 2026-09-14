@@ -3,6 +3,19 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.6 - 2026-09-14
+
+### Security
+
+- The same-origin request guard now comes from a fragment shared through `dsh-mini-utility-dock`. The three plugins previously maintained one `createGuard` each, and the copies had drifted three times: all three rejected the IPv6 loopback `::1`; the three disagreed on which Host spellings count as loopback; and an unbracketed IPv6 Host (for example `::1:3080`, which RFC 7230 forbids) silently skipped the Host allowlist. One implementation now decides. This plugin keeps every existing error code and message, and both the `createGuard` call signature and the fleet-mode semantics are unchanged.
+- This plugin listed `::ffff:127.0.0.1` in its loopback allowlist, but that string could never match on the Origin path: the WHATWG URL parser normalises `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`. The entry is replaced by the shared decision, which treats both spellings as loopback on the Host and the Origin path alike.
+- A Host header that is present but parses to no hostname is treated as non-loopback. That case previously skipped the allowlist.
+
+### Changed
+
+- Add `loopback:sync` / `loopback:check` and `guard:sync` / `guard:check` to sync and verify the two generated fragments in `lib/shared.js`; `npm test` fails when either has drifted.
+- Depend on `dsh-mini-utility-dock` 0.1.3, the first published release carrying those fragments.
+
 ## 0.9.5 - 2026-09-04
 
 ### Changed
