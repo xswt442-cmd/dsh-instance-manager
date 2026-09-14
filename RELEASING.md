@@ -8,7 +8,17 @@ Releases are tag-driven. Branch pushes do not publish anything. The examples bel
    - `package.json#version`
    - `lib/shared.js#VERSION`
    - the first section of both changelogs: `## X.Y.Z - YYYY-MM-DD`
-2. Run:
+2. Make sure the embedded fragments match their canonical sources in
+   `dsh-mini-utility-dock` (the dock bootstrap in `lib/client.js`, the loopback
+   predicates in `lib/shared.js`). `npm test` fails if either has drifted, and
+   `npm run loopback:sync` / `npm run dock:sync` rewrites them:
+
+   ```sh
+   npm run loopback:sync
+   npm run dock:sync
+   ```
+
+3. Run:
 
    ```sh
    npm test
@@ -16,14 +26,14 @@ Releases are tag-driven. Branch pushes do not publish anything. The examples bel
    npm pack --dry-run
    ```
 
-3. Commit and push the development branch:
+4. Commit and push the development branch:
 
    ```sh
    git commit -am "chore: release X.Y.Z"
    git push origin dev
    ```
 
-4. After its CI passes, merge the development branch into `main` and push:
+5. After its CI passes, merge the development branch into `main` and push:
 
    ```sh
    git switch main
@@ -31,7 +41,7 @@ Releases are tag-driven. Branch pushes do not publish anything. The examples bel
    git push origin main
    ```
 
-5. Tag the release commit:
+6. Tag the release commit:
 
    ```sh
    git tag vX.Y.Z

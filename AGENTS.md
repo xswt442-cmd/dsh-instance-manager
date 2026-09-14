@@ -17,6 +17,9 @@
 - Refactor when it simplifies the requested change or prevents technical debt.
 - Keep changes focused; avoid unrelated or speculative refactors.
 - Keep `package.json#version` and `lib/shared.js#VERSION` equal.
+- The marked `dsh-loopback-helpers` block in `lib/shared.js` is generated from
+  `dsh-mini-utility-dock/dist/loopback.js`; edit the dock fragment and run
+  `npm run loopback:sync`, never the block itself.
 - Access optional DSH services only inside `ctx.inject(...)` callbacks.
 - Preserve the request guards in `lib/shared.js`. Local routes and fleet routes have different trust boundaries.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.

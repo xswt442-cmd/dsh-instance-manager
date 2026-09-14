@@ -58,6 +58,27 @@ test('isLoopbackName rejects foreign and empty names', () => {
   assert.equal(isLoopbackName('::ffff:8.8.8.8'), false)
   assert.equal(isLoopbackName(''), false)
   assert.equal(isLoopbackName(undefined), false)
+  // The allowlist is exact spellings only — the v4-mapped v6 form of 127.0.0.1
+  // is accepted because it maps to an allowlisted name, not by being listed.
+  assert.equal(isLoopbackName('127.0.0.2'), false)
+  assert.equal(isLoopbackName('api.localhost'), false)
+})
+
+// Regression: the loopback predicates are shared with dsh-ballast and
+// dsh-treekeeper through a generated block (scripts/guard-parity.mjs compares
+// it). This repo previously carried a dead '::ffff:127.0.0.1' allowlist entry —
+// unreachable from the Origin path, because the WHATWG URL parser rewrites the
+// dotted form to hex — while ballast and treekeeper disagreed on both forms.
+// Both spellings must be loopback, on both paths, in all three plugins.
+test('the IPv4-mapped IPv6 loopback form is loopback in both spellings', () => {
+  for (const name of ['::ffff:127.0.0.1', '::ffff:7f00:1', '::FFFF:7F00:1']) {
+    assert.ok(isLoopbackName(name), name)
+    assert.ok(isLoopbackName(hostHostname(`[${name}]:3080`)), `bracketed: ${name}`)
+  }
+  // Non-loopback mapped addresses stay non-loopback.
+  for (const name of ['::ffff:10.0.0.1', '::ffff:8.8.8.8']) {
+    assert.equal(isLoopbackName(name), false, name)
+  }
 })
 
 test('hostHostname strips ports and brackets', () => {
