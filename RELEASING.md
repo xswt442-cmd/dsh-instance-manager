@@ -11,10 +11,10 @@ Releases are tag-driven. Branch pushes do not publish anything. The examples bel
 2. Make sure the embedded fragments match their canonical sources in
    `dsh-mini-utility-dock` (the dock bootstrap in `lib/client.js`, the loopback
    predicates in `lib/shared.js`). `npm test` fails if either has drifted, and
-   `npm run loopback:sync` / `npm run dock:sync` rewrites them:
+   `npm run guard:sync` / `npm run dock:sync` rewrites them:
 
    ```sh
-   npm run loopback:sync
+   npm run guard:sync
    npm run dock:sync
    ```
 

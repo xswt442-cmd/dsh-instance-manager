@@ -5,11 +5,11 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "npm run dock:check && npm run loopback:check && node --test test/*.test.js",
+    "test": "npm run dock:check && npm run guard:check && node --test test/*.test.js",
     "dock:sync": "dsh-mini-utility-dock sync lib/client.js",
     "dock:check": "dsh-mini-utility-dock check lib/client.js",
-    "loopback:sync": "dsh-mini-utility-dock sync lib/shared.js",
-    "loopback:check": "dsh-mini-utility-dock check lib/shared.js",
+    "guard:sync": "dsh-mini-utility-dock sync lib/shared.js",
+    "guard:check": "dsh-mini-utility-dock check lib/shared.js",
     "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
