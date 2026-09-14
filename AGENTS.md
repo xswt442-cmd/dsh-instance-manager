@@ -17,9 +17,12 @@
 - Refactor when it simplifies the requested change or prevents technical debt.
 - Keep changes focused; avoid unrelated or speculative refactors.
 - Keep `package.json#version` and `lib/shared.js#VERSION` equal.
-- The marked `dsh-host-guard` block in `lib/shared.js` is generated from
-  `dsh-mini-utility-dock/dist/guard.js`; edit the dock fragment and run
-  `npm run guard:sync`, never the block itself.
+- The two marked blocks in `lib/shared.js` are generated from
+  `dsh-mini-utility-dock`: `dsh-loopback-helpers` from `dist/loopback.js` and
+  `dsh-host-guard` from `dist/guard.js`. Edit the dock fragment and run
+  `npm run loopback:sync` / `npm run guard:sync` (either maintains both blocks),
+  never the blocks themselves. The guard block depends on the loopback block, so
+  keep that order.
 - Access optional DSH services only inside `ctx.inject(...)` callbacks.
 - Preserve the request guards in `lib/shared.js`. Local routes and fleet routes have different trust boundaries.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.

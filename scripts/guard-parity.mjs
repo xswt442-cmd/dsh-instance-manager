@@ -1,8 +1,8 @@
-// Cross-repo drift check for the shared host guard.
+// Cross-repo drift check for the shared host fragments.
 //
-// Why this exists: the three plugins ship their own copy of the request guard
-// because each package has to stand alone. That copy drifted three times, and
-// every drift was security-relevant:
+// Why this exists: the three plugins ship their own copy of the loopback
+// predicates and the request guard because each package has to stand alone. Those
+// copies drifted three times, and every drift was security-relevant:
 //
 //   1. all three rejected IPv6 loopback (`::1`) — a legitimate browser was
 //      locked out of its own API;
@@ -12,20 +12,23 @@
 //   3. a Host that parsed to no hostname silently skipped the allowlist in one
 //      plugin and was denied in the others.
 //
-// The copies are no longer hand-written: they are an embedded block generated
-// from dsh-mini-utility-dock/dist/guard.js by the dock CLI. So this checker
-// asserts three things a generator alone cannot:
+// The copies are no longer hand-written: they are two embedded blocks generated
+// from dsh-mini-utility-dock by the dock CLI — `dist/loopback.js` (the predicates)
+// and `dist/guard.js` (the enforcement policy). So this checker asserts three
+// things a generator alone cannot:
 //
-//   * the embedded block is byte-identical in all three repos (a hand edit to
-//     one copy, or a repo that never re-ran `guard:sync`, fails here);
-//   * no repo keeps a private copy of an enforcement decision beside the block —
-//     that is how drifts 1-3 happened, and embedding the block is worthless if a
-//     repo also branches on its own version;
+//   * both embedded blocks are byte-identical in all three repos (a hand edit to
+//     one copy, or a repo that never re-ran `loopback:sync` / `guard:sync`, fails
+//     here), and they appear in dependency order — the guard uses the predicates
+//     the loopback block declares in the same file;
+//   * no repo keeps a private copy of an enforcement decision beside them — that
+//     is how drifts 1-3 happened, and embedding the blocks is worthless if a repo
+//     also branches on its own version;
 //   * the three AGREE ON EVERY DECISION. Error codes and wording deliberately
 //     differ (each plugin's published API vocabulary), so the comparison is on
 //     the allow/deny outcome only. This is the assertion that survives a policy
 //     change: byte equality implies it, but only this proves each consumer
-//     actually routes through the block.
+//     actually routes through the blocks.
 //
 // Usage:  node scripts/guard-parity.mjs        (from a repo checkout, CI)
 //         DSH_PLUGINS_ROOT=<dir with the three repos> node scripts/guard-parity.mjs
@@ -49,74 +52,120 @@ const repos = [
   ['dsh-ballast', 'BAL', 'ballastGuard']
 ]
 
-const MARK_START = '// <dsh-host-guard>'
-const MARK_END = '// </dsh-host-guard>'
+// Dependency order: the guard block uses the predicates the loopback block
+// declares, so it must come second.
+const BLOCKS = [
+  { name: 'dsh-loopback-helpers', label: 'loopback predicates' },
+  { name: 'dsh-host-guard', label: 'host guard' }
+]
 
-// Pull the generated block out of a consumer's lib/shared.js. Everything between
+const marks = (name) => ({ start: `// <${name}>`, end: `// </${name}>` })
+
+// Pull a generated block out of a consumer's lib/shared.js. Everything between
 // the markers is generator output, so it must match byte for byte; the consumer
 // indents it, which is stripped before comparing.
-const extractBlock = (src) => {
+const extractBlock = (src, name) => {
+  const { start, end } = marks(name)
   const lines = src.split(/\r?\n/)
-  const starts = lines.reduce((hits, line, i) => line.trim() === MARK_START ? [...hits, i] : hits, [])
-  const ends = lines.reduce((hits, line, i) => line.trim() === MARK_END ? [...hits, i] : hits, [])
+  const starts = lines.reduce((hits, line, i) => line.trim() === start ? [...hits, i] : hits, [])
+  const ends = lines.reduce((hits, line, i) => line.trim() === end ? [...hits, i] : hits, [])
   if (starts.length !== 1 || ends.length !== 1 || ends[0] <= starts[0]) return null
   return lines.slice(starts[0] + 1, ends[0]).map((line) => line.replace(/^\s{2}/, '')).join('\n').trim()
 }
 
 const read = (repo) => readFileSync(join(root, repo, 'lib', 'shared.js'), 'utf8')
 
-const dropBlock = (src) => {
+const spanOf = (src, name) => {
+  const { start, end } = marks(name)
   const lines = src.split(/\r?\n/)
-  const start = lines.findIndex((line) => line.trim() === MARK_START)
-  const end = lines.findIndex((line) => line.trim() === MARK_END)
-  return (start >= 0 && end > start) ? [...lines.slice(0, start), ...lines.slice(end + 1)].join('\n') : src
+  const from = lines.findIndex((line) => line.trim() === start)
+  const to = lines.findIndex((line) => line.trim() === end)
+  return from >= 0 && to > from ? { from, to } : null
+}
+
+// Everything that is neither block: the plugin's own code, which is where a
+// private copy of an enforcement decision would hide.
+const dropBlocks = (src) => {
+  const spans = BLOCKS.map((b) => spanOf(src, b.name)).filter(Boolean).sort((a, b) => b.from - a.from)
+  const lines = src.split(/\r?\n/)
+  for (const { from, to } of spans) lines.splice(from, to - from + 1)
+  return lines.join('\n')
 }
 
 if (process.argv.includes('--self-test')) {
-  const good = [MARK_START, 'const a = 1', 'const b = 2', MARK_END].join('\n')
+  const good = [
+    marks('dsh-loopback-helpers').start, 'const a = 1', marks('dsh-loopback-helpers').end,
+    marks('dsh-host-guard').start, 'const b = 2', marks('dsh-host-guard').end
+  ].join('\n')
   const cases = [
-    ['block is extracted', good, 'const a = 1\nconst b = 2'],
-    ['missing end marker returns null', [MARK_START, 'const a = 1'].join('\n'), null],
-    ['duplicate start returns null', [MARK_START, MARK_START, MARK_END].join('\n'), null],
-    ['indent is stripped', [MARK_START, '  const a = 1', MARK_END].join('\n'), 'const a = 1'],
-    ['wrong fragment marker returns null', ['// <dsh-mini-utility-dock>', 'x', MARK_END].join('\n'), null]
+    ['first block extracted', 'dsh-loopback-helpers', good, 'const a = 1'],
+    ['second block extracted', 'dsh-host-guard', good, 'const b = 2'],
+    ['indent is stripped', 'dsh-loopback-helpers', [marks('dsh-loopback-helpers').start, '  const a = 1', marks('dsh-loopback-helpers').end].join('\n'), 'const a = 1'],
+    ['missing end marker returns null', 'dsh-loopback-helpers', [marks('dsh-loopback-helpers').start, 'const a = 1'].join('\n'), null],
+    ['absent block returns null', 'dsh-host-guard', good.replace(/dsh-host-guard/g, 'other'), null]
   ]
   let bad = 0
-  for (const [label, src, expected] of cases) {
-    const got = extractBlock(src)
+  for (const [label, name, src, expected] of cases) {
+    const got = extractBlock(src, name)
     const ok = got === expected
     if (!ok) console.log(`self-test FAIL ${label}\n  expected: ${JSON.stringify(expected)}\n  got:      ${JSON.stringify(got)}`)
     else console.log(`self-test ok   ${label}`)
     if (!ok) bad++
   }
+  // Dropping both blocks must leave only the plugin's own code.
+  const residual = dropBlocks(good)
+  const dropOk = !/const a = 1|const b = 2/.test(residual)
+  console.log(dropOk ? 'self-test ok   both blocks dropped' : `self-test FAIL both blocks dropped: ${JSON.stringify(residual)}`)
+  if (!dropOk) bad++
   process.exit(bad ? 1 : 0)
 }
 
 let failures = 0
 
-// 1. The generated block must be present and byte-identical everywhere.
-const blocks = repos.map(([repo, tag]) => ({ repo, tag, block: extractBlock(read(repo)) }))
-const missing = blocks.filter((b) => b.block === null)
-if (missing.length) {
-  console.log(`FAIL guard block: missing or malformed markers in ${missing.map((m) => m.tag).join(', ')}`)
-  failures++
-} else {
-  const base = blocks[0]
-  const drifted = blocks.slice(1).filter((b) => b.block !== base.block)
+// 1. Both generated blocks must be present, byte-identical everywhere, and in
+//    dependency order.
+for (const block of BLOCKS) {
+  const copies = repos.map(([repo, tag]) => ({ repo, tag, body: extractBlock(read(repo), block.name) }))
+  const missing = copies.filter((c) => c.body === null)
+  if (missing.length) {
+    console.log(`FAIL ${block.label}: missing or malformed markers in ${missing.map((m) => m.tag).join(', ')}`)
+    failures++
+    continue
+  }
+  const base = copies[0]
+  const drifted = copies.slice(1).filter((c) => c.body !== base.body)
   if (drifted.length) {
-    console.log(`FAIL guard block: ${drifted.map((d) => d.tag).join(', ')} differ from ${base.tag}`)
+    console.log(`FAIL ${block.label}: ${drifted.map((d) => d.tag).join(', ')} differ from ${base.tag}`)
     for (const d of drifted) {
-      console.log(`\n--- ${base.tag} (${base.repo}/lib/shared.js) ---\n${base.block}`)
-      console.log(`\n--- ${d.tag} (${d.repo}/lib/shared.js) ---\n${d.block}`)
+      console.log(`\n--- ${base.tag} (${base.repo}/lib/shared.js) ---\n${base.body}`)
+      console.log(`\n--- ${d.tag} (${d.repo}/lib/shared.js) ---\n${d.body}`)
     }
     failures++
   } else {
-    console.log(`ok   guard block: identical across DIM/DTK/BAL (${base.block.length} chars)`)
+    console.log(`ok   ${block.label}: identical across DIM/DTK/BAL (${base.body.length} chars)`)
   }
 }
 
-// 2. Embedding the block is worthless if a repo also keeps its own enforcement
-//    beside it. Policy is expected outside the block; decisions are not.
+// The guard block reads what the loopback block declares in the same file, so the
+// order is load-bearing, not cosmetic.
+{
+  let orderBad = 0
+  for (const [repo, tag] of repos) {
+    const src = read(repo)
+    const loop = spanOf(src, 'dsh-loopback-helpers')
+    const guard = spanOf(src, 'dsh-host-guard')
+    if (!loop || !guard) continue
+    if (loop.from > guard.from) {
+      console.log(`FAIL ${tag}: the host guard block precedes the loopback predicates`)
+      orderBad++
+    }
+  }
+  if (orderBad) failures += orderBad
+  else console.log('ok   block order: the loopback predicates precede the host guard everywhere')
+}
+
+// 2. Embedding the blocks is worthless if a repo also keeps its own enforcement
+//    beside them. Policy is expected outside the blocks; decisions are not.
 //
 //    `remoteAddress` is deliberately NOT listed on its own: a plugin may keep a
 //    second helper that applies the same criterion for a different gate
@@ -129,13 +178,11 @@ const ENFORCEMENT = [
   [/(?:const|function|let)\s+isLoopbackAddress\b/, 'defines a private isLoopbackAddress'],
   [/(?:const|function|let)\s+hostHostname\b/, 'defines a private hostHostname'],
   [/(?:const|function|let)\s+bindGuard\b/, 'defines a private guard factory'],
-  [/sec-fetch-site/, 'branches on Fetch Metadata outside the block']
+  [/sec-fetch-site/, 'branches on Fetch Metadata outside the blocks']
 ]
 for (const [repo, tag] of repos) {
-  const outside = dropBlock(read(repo))
+  const outside = dropBlocks(read(repo))
   const problems = ENFORCEMENT.filter(([re]) => re.test(outside)).map(([, why]) => why)
-  // A private guard factory would have to read the peer address; catching that
-  // combination keeps this list honest without flagging a shared-criterion helper.
   if (/remoteAddress/.test(outside) && /function\s+guard\s*\(|=>\s*\{\s*$/.test(outside)) {
     problems.push('looks like a private guard reading the socket peer')
   }
@@ -143,7 +190,7 @@ for (const [repo, tag] of repos) {
     console.log(`FAIL ${tag}: ${problems.join('; ')}`)
     failures++
   } else {
-    console.log(`ok   ${tag}: no enforcement outside the generated block`)
+    console.log(`ok   ${tag}: no enforcement outside the generated blocks`)
   }
 }
 
