@@ -27,7 +27,6 @@ Release Notes 由对应版本段生成；最新版本在前。
 - 适配 DSH 0.1.2-rc.1 的 Connection 鉴权：浏览器 API 与 SSE 使用签名 cookie，内部实例探测保留严格 loopback 通道；Connection 拒绝或卸载时不再降级放行。
 - 网页面板启动的新实例会打开 DSH 的一次性 token URL 完成 cookie 交接；Agent 工具启动仍使用 `--no-open`，并统一采用显式 `--profile web` 参数。
 - 面板语言跟随 DSH 全局 locale，移除独立的 `dshim-lang` localStorage 偏好与语言按钮；旧 DSH 仍按浏览器语言降级。
-- 兼容检查显式覆盖 `0.1.2-rc.1` 与 latest。
 
 ### 修复
 
@@ -39,7 +38,6 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 变更
 
-- Mini Utility Dock 改由 `dsh-mini-utility-dock` 在构建时同步，插件发布物仍可独立运行。
 - Dock 统一过滤外部 SVG 图标，并为无效图标显示文本回退。
 
 ## 0.9.3 - 2026-09-01
@@ -169,7 +167,7 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 变更
 
-- 改进跨平台启动路径、并发探测、转发超时、CI boot-check 与版本校验。
+- 改进跨平台启动路径、并发探测与转发超时。
 
 ## 0.6.0 - 2026-08-24
 
@@ -185,10 +183,6 @@ Release Notes 由对应版本段生成；最新版本在前。
 ### 性能
 
 - 页面隐藏时暂停自动刷新，恢复可见时立即刷新。
-
-### 移除
-
-- 移除内部启动 payload 的废弃 `port` 字段。
 
 ## 0.5.0 - 2026-08-24
 

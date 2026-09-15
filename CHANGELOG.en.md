@@ -27,7 +27,6 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - Adapted browser API and SSE authentication to the DSH 0.1.2-rc.1 Connection signed cookie. Private instance probes retain a strict loopback path, and Connection rejection or disposal never falls back open.
 - Instances started from the web panel now open DSH's one-time token URL to complete the cookie handoff. Agent-tool starts retain `--no-open`, and both paths use explicit `--profile web` arguments.
 - The panel now follows the global DSH locale. The private `dshim-lang` localStorage preference and language button are removed; older DSH builds fall back to the browser language.
-- Compatibility checks now pin `0.1.2-rc.1` alongside latest.
 
 ### Fixed
 
@@ -39,7 +38,6 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- The Mini Utility Dock is now synchronized at build time from `dsh-mini-utility-dock`; published plugins remain standalone.
 - The Dock now filters external SVG icons and renders a text fallback for rejected markup.
 
 ## 0.9.3 - 2026-09-01
@@ -169,7 +167,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- Improved cross-platform launch paths, concurrent probing, forwarding timeouts, CI boot checks, and version validation.
+- Improved cross-platform launch paths, concurrent probing, and forwarding timeouts.
 
 ## 0.6.0 - 2026-08-24
 
@@ -185,10 +183,6 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 ### Performance
 
 - Auto-refresh pauses while the page is hidden and runs immediately on return.
-
-### Removed
-
-- Removed the obsolete `port` field from the internal start payload.
 
 ## 0.5.0 - 2026-08-24
 
