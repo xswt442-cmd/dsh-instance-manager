@@ -5,7 +5,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.9.7 - 2026-09-16
 
-### Changed
+### Maintenance
 
 - No user-visible functional or behavioural change: this release is repository maintenance only, and the LICENSE copyright holder is now `xswt442-cmd`.
 

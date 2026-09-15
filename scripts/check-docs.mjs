@@ -59,6 +59,7 @@ const category = new Map([
   ['安全', 'security'], ['Security', 'security'],
   ['性能', 'performance'], ['Performance', 'performance'],
   ['兼容性', 'compatibility'], ['Compatibility', 'compatibility'],
+  ['维护', 'maintenance'], ['Maintenance', 'maintenance'],
 ])
 
 function assertEqual(left, right, message) {
