@@ -7,7 +7,8 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Maintenance
 
-- No user-visible functional or behavioural change: this release is repository maintenance only, and the LICENSE copyright holder is now `xswt442-cmd`.
+- The shared-fragment CI check now runs in this repository (`loopback:check` / `guard:check`) instead of comparing across repositories.
+- The LICENSE copyright holder is now `xswt442-cmd`.
 
 ## 0.9.6 - 2026-09-14
 

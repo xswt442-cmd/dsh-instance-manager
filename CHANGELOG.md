@@ -7,7 +7,8 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 维护
 
-- 本版没有用户可见的功能或行为变化：改动仅限仓库维护，其中 LICENSE 的版权署名统一为 `xswt442-cmd`。
+- 共享片段的 CI 校验改为在本仓执行（`loopback:check` / `guard:check`），不再跨仓比对。
+- LICENSE 版权署名统一为 `xswt442-cmd`。
 
 ## 0.9.6 - 2026-09-14
 
