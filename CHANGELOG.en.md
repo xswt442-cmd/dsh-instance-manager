@@ -3,6 +3,14 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.7 - 2026-09-16
+
+### Changed
+
+- CI no longer runs the cross-repo `guard-parity` job. The shared fragments are verified locally by this repo's `npm test` (`loopback:check` / `guard:check`) against the dock version it pins: dock versions are immutable once published and consumers pin an exact version, so "all three pin the same version" already implies "all three hold byte-identical blocks", making the cross-repo comparison redundant.
+- `scripts/guard-parity.mjs` becomes a manual diagnostic rather than a CI gate. It now asserts that the three repos pin the same dock version and reach the same conclusion on every decision. `AGENTS.md` records why it is not a gate: a peer checkout resolves to the default branch, so the property it asserts does not hold there and it reports false failures.
+- The LICENSE copyright holder is now `xswt442-cmd`.
+
 ## 0.9.6 - 2026-09-14
 
 ### Security

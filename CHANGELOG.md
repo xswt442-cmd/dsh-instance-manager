@@ -3,6 +3,14 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.9.7 - 2026-09-16
+
+### 变更
+
+- CI 去掉跨仓的 `guard-parity` job。共享片段改由本仓 `npm test` 的 `loopback:check` / `guard:check` 对照所 pin 的 dock 版本校验——dock 版本发布后不可变、消费仓 pin 的又是精确版本，「三仓 pin 同一版本」已经蕴含「三仓的块逐字节相同」，跨仓比对属重复校验。
+- `scripts/guard-parity.mjs` 转为人工诊断工具（不再是 CI 门禁）：现在直接断言三仓 pin 一致，并断言三仓在每一道判定上结论相同。`AGENTS.md` 记明它只在三个检出处于同一分支时成立——peer 检出会解析到默认分支，因此它会误报，不适合当门禁。
+- LICENSE 的版权署名统一为 `xswt442-cmd`。
+
 ## 0.9.6 - 2026-09-14
 
 ### 安全
