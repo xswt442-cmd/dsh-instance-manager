@@ -7,22 +7,18 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- CI no longer runs the cross-repo `guard-parity` job. The shared fragments are verified locally by this repo's `npm test` (`loopback:check` / `guard:check`) against the dock version it pins: dock versions are immutable once published and consumers pin an exact version, so "all three pin the same version" already implies "all three hold byte-identical blocks", making the cross-repo comparison redundant.
-- `scripts/guard-parity.mjs` becomes a manual diagnostic rather than a CI gate. It now asserts that the three repos pin the same dock version and reach the same conclusion on every decision. `AGENTS.md` records why it is not a gate: a peer checkout resolves to the default branch, so the property it asserts does not hold there and it reports false failures.
-- The LICENSE copyright holder is now `xswt442-cmd`.
+- No user-visible functional or behavioural change: this release is repository maintenance only, and the LICENSE copyright holder is now `xswt442-cmd`.
 
 ## 0.9.6 - 2026-09-14
 
 ### Security
 
-- The same-origin request guard now comes from a fragment shared through `dsh-mini-utility-dock`. The three plugins previously maintained one `createGuard` each, and the copies had drifted three times: all three rejected the IPv6 loopback `::1`; the three disagreed on which Host spellings count as loopback; and an unbracketed IPv6 Host (for example `::1:3080`, which RFC 7230 forbids) silently skipped the Host allowlist. One implementation now decides. This plugin keeps every existing error code and message, and both the `createGuard` call signature and the fleet-mode semantics are unchanged.
-- This plugin listed `::ffff:127.0.0.1` in its loopback allowlist, but that string could never match on the Origin path: the WHATWG URL parser normalises `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`. The entry is replaced by the shared decision, which treats both spellings as loopback on the Host and the Origin path alike.
-- A Host header that is present but parses to no hostname is treated as non-loopback. That case previously skipped the allowlist.
+- Fix a way to bypass the same-origin check: when a `Host` header is present but yields no hostname (for example an unbracketed IPv6 host such as `::1:3080`, which RFC 7230 does not allow), the allowlist was skipped entirely. Such requests are now rejected as non-loopback.
+- The IPv4-mapped IPv6 loopback `[::ffff:127.0.0.1]` is now recognised on the Origin path too. It was only listed for the Host allowlist, while the URL parser normalises that spelling to `[::ffff:7f00:1]`, so the Origin check could never match.
 
-### Changed
+### Fixed
 
-- Add `loopback:sync` / `loopback:check` and `guard:sync` / `guard:check` to sync and verify the two generated fragments in `lib/shared.js`; `npm test` fails when either has drifted.
-- Depend on `dsh-mini-utility-dock` 0.1.3, the first published release carrying those fragments.
+- Reaching the plugin over the IPv6 loopback address `::1` no longer gets rejected.
 
 ## 0.9.5 - 2026-09-04
 
