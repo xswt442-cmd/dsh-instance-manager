@@ -280,6 +280,105 @@ const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAd
   }
 }
 
+// ---- action=open (cross-instance launch token) ----------------------------
+// DSH requires a per-process launch token on an instance's root URL, so the row
+// link must resolve through a redirect that supplies it. These cover the two
+// ways a plausible-looking implementation silently sends the browser to a 401:
+// reading a stale token from a rotated log, and trusting the log's host/port.
+const openRedirect = async (query) => {
+  const { routes, dispose } = mount()
+  try {
+    const route = routes.find((r) => r.path === API_PATH)
+    let status = 0
+    let headers = null
+    let body
+    const res = {
+      writeHead: (code, h) => { status = code; headers = h },
+      end: (chunk) => { body = chunk }
+    }
+    await route.handler(
+      { url: API_PATH + '?' + query, method: 'GET', headers: { host: '127.0.0.1' }, socket: { remoteAddress: '127.0.0.1' } },
+      res
+    )
+    return { status, headers, body }
+  } finally {
+    dispose()
+  }
+}
+
+const withLauncherLog = async (port, content, fn) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-open-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const dir = path.join(home, 'launcher', 'logs')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'server-' + port + '.out.log'), content)
+    return await fn()
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+}
+
+test('action=open redirects to the token of the CURRENT process, not an earlier one', async () => {
+  // A restarted instance appends one announcement per process, and the token is
+  // regenerated each time. The first line's token is dead; following it answers
+  // 401 exactly like sending no token at all, which is the bug this replaced.
+  const log = [
+    'dsh web: http://127.0.0.1:3101/?token=STALE_TOKEN_FROM_PREVIOUS_PROCESS',
+    '[dsh-cost-meter] unrelated line',
+    'dsh web: http://127.0.0.1:3101/?token=CURRENT_TOKEN'
+  ].join('\n')
+  const r = await withLauncherLog(3101, log, () => openRedirect('action=open&port=3101'))
+  assert.equal(r.status, 303)
+  assert.equal(r.headers.location, '/?token=CURRENT_TOKEN')
+  // The token must not persist in what the user lands on, and the redirect must
+  // not be cached or leak the referrer.
+  assert.equal(r.headers['cache-control'], 'no-store')
+  assert.equal(r.headers['referrer-policy'], 'no-referrer')
+  // A redirect body is not read by the browser, so there must not be one.
+  assert.equal(r.body, undefined)
+})
+
+test('action=open refuses a log whose host, port, or token does not match', async () => {
+  const cases = [
+    // A log line naming another host must not be used for this port.
+    ['http://evil.example:3101/?token=X', 'foreign host'],
+    // The token belongs to a different instance's port.
+    ['http://127.0.0.1:3102/?token=X', 'port mismatch'],
+    // Nothing to hand over.
+    ['http://127.0.0.1:3101/', 'no token']
+  ]
+  for (const [line, label] of cases) {
+    const r = await withLauncherLog(3101, 'dsh web: ' + line, () => openRedirect('action=open&port=3101'))
+    assert.equal(r.status, 409, label)
+    assert.match(r.body, /launch_token_unavailable/, label)
+  }
+  // Control: the same shape with a matching host/port/token does redirect, so the
+  // three rejections above are the checks firing rather than the parser failing.
+  const ok = await withLauncherLog(3101, 'dsh web: http://127.0.0.1:3101/?token=X', () => openRedirect('action=open&port=3101'))
+  assert.equal(ok.status, 303)
+  assert.equal(ok.headers.location, '/?token=X')
+})
+
+test('action=open reports a missing log instead of redirecting to a bare root', async () => {
+  // An instance this host did not launch (no launcher log) has no readable
+  // token. Redirecting to the bare root would reproduce the original 401.
+  const r = await openRedirect('action=open&port=3199')
+  assert.equal(r.status, 409)
+  assert.match(r.body, /launch_token_unavailable/)
+})
+
+test('action=open refuses a port that is not an integer in range', async () => {
+  for (const bad of [TRAVERSAL, '80.5', '1e3', '0', '65536', 'abc', '']) {
+    const r = await openRedirect('action=open&port=' + encodeURIComponent(bad))
+    assert.equal(r.status, 400, 'port=' + bad)
+    assert.match(r.body, /no_port/)
+  }
+})
+
 test('action=logs refuses a port that is not an integer in range', async () => {
   // The port is interpolated into $DSH_HOME/launcher/logs/server-<port>.*.log,
   // so a traversal string here was a real file-read primitive.

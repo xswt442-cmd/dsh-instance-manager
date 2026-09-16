@@ -14,7 +14,8 @@
 - 查看 stdout/stderr 日志、内存趋势和活跃会话概要。
 - 启动新实例；优雅停止单个、当前或全部本地实例。
 - 在 DSH 0.1.2-rc.1+ 中，网页启动会打开一次性 token URL，让新实例安全换取浏览器 cookie；Agent 工具启动保持后台无窗口。
-- 通过受认证的 peer 链路查看远程实例、日志和会话。
+- 点击某行的 `:端口` 打开该实例的界面。新版 DSH 要求实例根 URL 携带每进程的启动 token，因此该链接指向一个重定向端点，由宿主读出该实例当前 token 后 303 跳转；token 不进入面板状态或链接本身。实例非本机 launcher 启动时读不到 token，此时明确返回 `launch_token_unavailable`，并提示改用 `dsh web` 打印的 URL，而不是跳到必然 401 的裸根地址。
+- 通过受认证的 peer 链路查看远程实例、日志和会话。远程行的端口链接由该 peer 自身的面板完成同样的 token 换取。
 - 提供 `instance_list`、`instance_start`、`instance_stop`、`instance_logs` 和 `instance_sessions` Agent 工具。
 
 ## 安装

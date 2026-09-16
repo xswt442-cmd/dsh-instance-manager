@@ -3,6 +3,21 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.8 - 2026-09-17
+
+### Fixed
+
+- Clicking a row's `:port` no longer navigates to a bare root that must answer 401. Current DSH requires the per-process launch token on an instance root; the link pointed at `http://127.0.0.1:<port>/`, so newer hosts answered `authentication required; reopen the URL printed by dsh web`.
+- The link now targets a redirect endpoint, `?action=open&port=`: the host reads that instance's **current process** token from `$DSH_HOME/launcher/logs/server-<port>.out.log` and answers 303. The token is regenerated on every process start, so a port that has been restarted accumulates one line per process, and only the **last** line is current — following an earlier one yields an equally invalid token.
+- The log line is parsed as a URL rather than prefix-matched, and the scheme, loopback host, requested port, root path, and token presence are all checked; any mismatch counts as no token.
+- When no token can be read — the instance was not started by this host's launcher, or the log has rotated — the endpoint answers 409 `launch_token_unavailable` naming the `dsh web` URL to use, instead of silently redirecting to a bare root.
+- A remote instance row's port link performs the same exchange on that peer's own panel: the token is readable only on the host running the instance.
+
+### Security
+
+- The token never enters panel state and never appears in the link's `href`; it exists only in the 303 response's `Location` header, which carries `cache-control: no-store` and `referrer-policy: no-referrer`. DSH then exchanges it for a cookie and redirects to a clean `/`.
+- `action=open` passes the same browser authentication gate as `list` / `logs` / `sessions`; it is not a new unauthenticated endpoint.
+
 ## 0.9.7 - 2026-09-16
 
 ### Maintenance

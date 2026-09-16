@@ -14,7 +14,8 @@ View, start, and stop local DSH Web instances, with optional access to trusted r
 - Inspect stdout/stderr logs, memory trends, and active-session summaries.
 - Start new instances and gracefully stop one, the current instance, or all local instances.
 - On DSH 0.1.2-rc.1+, web-panel starts open the one-time token URL so the new instance can issue its browser cookie; agent-tool starts remain headless.
-- View remote instances, logs, and sessions through authenticated peer links.
+- Clicking a row's `:port` opens that instance's UI. Current DSH requires the per-process launch token on an instance root, so the link targets a redirect endpoint: the host reads that instance's current token and answers 303. The token never enters panel state or the link itself. When the instance was not started by this host's launcher there is no token to read, and the endpoint answers `launch_token_unavailable` naming the `dsh web` URL to use, rather than redirecting to a bare root that must answer 401.
+- View remote instances, logs, and sessions through authenticated peer links. A remote row's port link performs the same token exchange on that peer's own panel.
 - Expose the `instance_list`, `instance_start`, `instance_stop`, `instance_logs`, and `instance_sessions` agent tools.
 
 ## Install

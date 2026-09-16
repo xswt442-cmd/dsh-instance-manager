@@ -3,6 +3,21 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.9.8 - 2026-09-17
+
+### 修复
+
+- 点击某行的 `:端口` 不再跳到必然 401 的裸根地址。当前 DSH 要求实例根 URL 携带每进程的启动 token，此前该链接指向 `http://127.0.0.1:<port>/`，因此新版本下会得到 `authentication required; reopen the URL printed by dsh web`。
+- 该链接现指向重定向端点 `?action=open&port=`：宿主从 `$DSH_HOME/launcher/logs/server-<port>.out.log` 读出该实例**当前进程**的 token 并返回 303。token 每次进程启动都会重新生成，同一端口重启后日志中会累积多行，因此只取**最后一条**——取旧行会得到一个同样无效的 token。
+- 日志行按 URL 解析而非字符串前缀匹配，并校验协议为 http、主机为回环、端口与请求一致、路径为 `/` 且存在 token；任一项不符即视为无 token。
+- 无 token 可读时（实例不由本机 launcher 启动，或日志已轮转）返回 409 `launch_token_unavailable` 并提示使用 `dsh web` 打印的 URL，不再静默跳到裸根地址。
+- 远程实例行的端口链接改由该 peer 自身的面板执行同一换取流程：token 只在运行该实例的主机上可读。
+
+### 安全
+
+- token 不进入面板状态，也不出现在链接的 `href` 中，仅存在于 303 响应的 `Location` 头；该响应带 `cache-control: no-store` 与 `referrer-policy: no-referrer`，DSH 随即用 token 换取 cookie 并跳到干净的 `/`。
+- `action=open` 与 `list` / `logs` / `sessions` 走同一浏览器认证门，不是新增的未认证端点。
+
 ## 0.9.7 - 2026-09-16
 
 ### 维护
