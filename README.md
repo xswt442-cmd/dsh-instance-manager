@@ -10,17 +10,18 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-从 DSH Web 中查看、启动和停止本机实例，也可连接受信任的远程实例。入口位于页面左下角的 Mini Utility Dock。
+DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下角的 Mini Utility Dock。
 
 ## 功能
 
-- 列出实例的端口、PID、运行时长、会话数、内存和版本状态。
-- 查看 stdout/stderr 日志、内存趋势和活跃会话概要。
-- 启动新实例；优雅停止单个、当前或全部本地实例。启动时可留空端口由宿主在托管端口段内取第一个空闲端口，也可指定端口——指定的端口若已被占用会明确报错，不会改到别的端口启动。
-- 在 DSH 0.1.2-rc.1+ 中，网页启动会打开一次性 token URL，让新实例安全换取浏览器 cookie；Agent 工具启动保持后台无窗口。
-- 点击某行的 `:端口` 打开该实例的界面。新版 DSH 要求实例根 URL 携带每进程的启动 token，因此该链接指向一个重定向端点，由宿主读出该实例当前 token 后 303 跳转；token 不进入面板状态或链接本身。实例非本机 launcher 启动时读不到 token，此时明确返回 `launch_token_unavailable`，并提示改用 `dsh web` 打印的 URL，而不是跳到必然 401 的裸根地址。
-- 通过受认证的 peer 链路查看远程实例、日志和会话。远程行的端口链接由该 peer 自身的面板完成同样的 token 换取。
-- 提供 `instance_list`、`instance_start`、`instance_stop`、`instance_logs` 和 `instance_sessions` Agent 工具。
+- 每个实例一行：端口、PID、运行时长、会话数、常驻内存、版本，以及它当前是否为该面板所在实例。
+- 启动新实例：端口留空时在托管端口段（默认 3080–3129）内挑第一个空闲端口，填入端口则在指定端口启动。指定端口已被占用时明确报错，不会改到别的端口。
+- 打开实例：点击某行的 `:端口` 跳转到该实例界面。DSH 要求实例根 URL 携带每进程的启动 token，因此该链接指向一个重定向端点，由宿主读出该实例当前 token 后 303 跳转；token 不进入面板状态或链接本身。实例不由本机 launcher 启动（读不到 token）时返回 `launch_token_unavailable`，提示改用 `dsh web` 打印的 URL。
+- 停止实例：单个、当前或全部本地实例，都通过目标实例自身的优雅退出完成；远程行只读，不参与 stop-all。
+- 每个实例的只读视图：stdout/stderr 日志、会话概要，以及该实例正在跑什么。
+- 远程实例：配置 peer 后，可查看远程实例及其日志与会话；端口链接由该 peer 自身的面板完成同样的 token 换取。
+- Agent 工具：`instance_list`、`instance_start`、`instance_stop`、`instance_logs`、`instance_sessions`。
+- 网页启动会打开一次性 token URL 让新实例换取浏览器 cookie；Agent 工具启动保持后台无窗口。
 
 ## 安装
 

@@ -10,17 +10,18 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-View, start, and stop local DSH Web instances, with optional access to trusted remote instances. Open it from the Mini Utility Dock at the bottom-left of the page.
+Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the Mini Utility Dock at the bottom-left of the page.
 
 ## Features
 
-- List instance ports, PIDs, uptime, sessions, memory, and version status.
-- Inspect stdout/stderr logs, memory trends, and active-session summaries.
-- Start new instances and gracefully stop one, the current instance, or all local instances. The port may be left empty, in which case the host takes the first free port in the managed range, or named explicitly — a named port that is already in use is reported as such rather than starting somewhere else.
-- On DSH 0.1.2-rc.1+, web-panel starts open the one-time token URL so the new instance can issue its browser cookie; agent-tool starts remain headless.
-- Clicking a row's `:port` opens that instance's UI. Current DSH requires the per-process launch token on an instance root, so the link targets a redirect endpoint: the host reads that instance's current token and answers 303. The token never enters panel state or the link itself. When the instance was not started by this host's launcher there is no token to read, and the endpoint answers `launch_token_unavailable` naming the `dsh web` URL to use, rather than redirecting to a bare root that must answer 401.
-- View remote instances, logs, and sessions through authenticated peer links. A remote row's port link performs the same token exchange on that peer's own panel.
-- Expose the `instance_list`, `instance_start`, `instance_stop`, `instance_logs`, and `instance_sessions` agent tools.
+- One row per instance: port, PID, uptime, live session count, resident memory, version, and whether it is the instance hosting this panel.
+- Start a new instance. An empty port means the host picks the first free port in the managed range (3080-3129 by default); a named port is used exactly, and one that is already in use is reported instead of starting somewhere else.
+- Open an instance: a row's `:port` navigates to that instance's UI. DSH requires the per-process launch token on an instance root, so the link targets a redirect endpoint: the host reads that instance's current token and answers 303, and the token never enters panel state or the link itself. When the instance was not started by this host's launcher there is no token to read, and the endpoint answers `launch_token_unavailable` naming the `dsh web` URL to use.
+- Stop one, the current, or all local instances; each stop goes through the target instance's own graceful shutdown. Remote rows are read-only and are never part of stop-all.
+- Read-only views per instance: stdout/stderr logs, session summaries, and what the instance is serving.
+- Remote instances: with a peer configured, view remote instances, logs, and sessions; a remote row's port link performs the same token exchange on that peer's own panel.
+- Agent tools: `instance_list`, `instance_start`, `instance_stop`, `instance_logs`, `instance_sessions`.
+- A web-panel start opens the one-time token URL so the new instance can issue its browser cookie; agent-tool starts remain headless.
 
 ## Install
 
