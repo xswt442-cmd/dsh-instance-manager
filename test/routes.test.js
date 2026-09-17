@@ -363,6 +363,35 @@ test('action=open refuses a log whose host, port, or token does not match', asyn
   assert.equal(ok.headers.location, '/?token=X')
 })
 
+// ---- action=start (explicit port) ----------------------------------------
+// An absent port keeps the auto pick; a present one is the caller's stated
+// intent. The two ways to get that wrong are to swallow a bad value and silently
+// auto-pick, and to report "in use" as a generic start failure.
+test('action=start rejects an unusable port instead of falling back to auto', async () => {
+  for (const bad of [TRAVERSAL, '80.5', '1e3', '0', '65536', 'abc', '-1', '99999']) {
+    const r = await callApi('action=start&port=' + encodeURIComponent(bad), 'POST')
+    assert.equal(r.status, 400, 'port=' + bad)
+    assert.equal(r.json.code, 'no_port', 'port=' + bad)
+  }
+})
+
+test('action=start reports a requested port that is already serving', async () => {
+  // A real listener on an ephemeral port: tryConnect must see it as occupied.
+  const net = await import('node:net')
+  const server = net.createServer()
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const busy = server.address().port
+  try {
+    const r = await callApi('action=start&port=' + busy, 'POST')
+    assert.equal(r.status, 200)
+    assert.equal(r.json.ok, false)
+    assert.equal(r.json.code, 'port_in_use')
+    assert.equal(r.json.port, busy, 'the answer names the port that was requested')
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
 test('action=open reports a missing log instead of redirecting to a bare root', async () => {
   // An instance this host did not launch (no launcher log) has no readable
   // token. Redirecting to the bare root would reproduce the original 401.

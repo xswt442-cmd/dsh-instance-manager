@@ -3,6 +3,17 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.10 - 2026-09-17
+
+### Added
+
+- Starting a new instance can name a port. The toolbar gains a port field: empty keeps the previous behaviour (the first free port in the managed range), a value starts on that port. A named port that is already in use answers `port_in_use` and names it, and the instance is **not** started elsewhere; a non-integer or out-of-range value answers 400 instead of silently falling back to auto.
+- The lost-scan/bind-race retry applies only to an auto-picked port. A named port is no longer retried on another port, which would start an instance the caller did not ask for.
+
+### Changed
+
+- The armed stop button is now an outlined warning (`--dsw-alias-state-warn-primary`) labelled "确认？" / "Confirm?". It was a solid error-red fill: red denotes a failure that already happened, whereas the stop has not run yet and the click is still reversible. The unarmed button keeps its original red outline and "Stop" label.
+
 ## 0.9.9 - 2026-09-17
 
 ### Fixed
