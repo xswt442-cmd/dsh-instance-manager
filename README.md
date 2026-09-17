@@ -1,17 +1,14 @@
 # dsh-instance-manager
 
-[![npm version](https://img.shields.io/npm/v/dsh-instance-manager?color=4d6bfe&label=npm)](https://www.npmjs.com/package/dsh-instance-manager)
-[![npm downloads](https://img.shields.io/npm/dm/dsh-instance-manager?label=downloads)](https://www.npmjs.com/package/dsh-instance-manager)
-[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.0--rc.5-4d6bfe)](https://github.com/deepseek-ai/deepseek-harness)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520-5fa04e)](https://nodejs.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![entry](https://img.shields.io/badge/entry-Mini%20Utility%20Dock-6b7280)](https://www.npmjs.com/package/dsh-mini-utility-dock)
-
 [中文](./README.md) | [English](./README.en.md)
 
-[![npm](https://img.shields.io/npm/v/dsh-instance-manager)](https://www.npmjs.com/package/dsh-instance-manager)
-![DSH plugin](https://img.shields.io/badge/DSH-plugin-4d6bfe)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=plugin&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![npm](https://img.shields.io/npm/v/dsh-instance-manager?label=npm&color=4d6bfe)](https://www.npmjs.com/package/dsh-instance-manager)
+[![release](https://img.shields.io/github/v/release/xswt442-cmd/dsh-instance-manager?label=release&color=16a3a3)](https://github.com/xswt442-cmd/dsh-instance-manager/releases)
+[![DSH](https://img.shields.io/static/v1?label=DSH&message=%3E%3D0.1.0-rc.5&color=4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![node](https://img.shields.io/static/v1?label=node&message=%3E%3D20&color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
+[![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
+[![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
 从 DSH Web 中查看、启动和停止本机实例，也可连接受信任的远程实例。入口位于页面左下角的 Mini Utility Dock。
 

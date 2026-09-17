@@ -258,6 +258,33 @@ test('the start button leaves the busy state after the host answers', async () =
   assert.equal(after.props.disabled, false, 'the start button must be usable again')
 })
 
+test('a failed follow-up refresh still releases the busy state', async () => {
+  // The clearing of `starting` used to sit AFTER the post-action refresh, so a
+  // throw out of that refresh left the disabled "Starting…" button on screen —
+  // the panel locked out of every later action, with the host perfectly healthy.
+  let listCalls = 0
+  const panel = mountPanel({
+    fetchImpl: async (url) => {
+      const query = String(url).split('?')[1] || ''
+      if (/action=start/.test(query)) return { json: async () => ({ ok: true, port: 3081, pid: 2 }) }
+      if (/action=list/.test(query)) {
+        listCalls += 1
+        // The first list load (the mount effect) succeeds; the refresh that
+        // follows the start does not.
+        if (listCalls > 1) throw new Error('list read failed')
+        return { json: async () => LIST_ONE }
+      }
+      return { json: async () => ({ ok: true }) }
+    }
+  })
+  await panel.flush()
+  buttonByText(panel.renderTree(), /New instance/).props.onClick()
+  await panel.flush()
+  const after = buttonByText(panel.renderTree(), /New instance/)
+  assert.ok(after, 'a failed refresh must not leave the button on its busy label')
+  assert.equal(after.props.disabled, false, 'the start button must be usable again')
+})
+
 test('the start button reports a refused port instead of staying busy', async () => {
   const { panel } = panelWithFetch({
     start: { ok: false, code: 'port_in_use', port: 3333, error: 'port 3333 is already in use' }

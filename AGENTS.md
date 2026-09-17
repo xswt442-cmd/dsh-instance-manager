@@ -32,6 +32,7 @@
 - Access optional DSH services only inside `ctx.inject(...)` callbacks.
 - Preserve the request guards in `lib/shared.js`. Local routes and fleet routes have different trust boundaries.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
+- CHANGELOG entries are one or two lines: what changed, and why it matters. No implementation narrative, incident timeline, or root-cause essay.
 
 ## Verify
 

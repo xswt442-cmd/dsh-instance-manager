@@ -606,3 +606,36 @@ test('a request with no socket peer fails closed at the guard', async () => {
   assert.equal(r.status, 403)
   assert.equal(r.json.code, 'unknown_peer')
 })
+
+// A graceful self-exit leaves no crash log, no diagnostic report and no stderr
+// line, so "the instance serving my panel died on its own" and "something
+// killed it" look identical in the logs. Every self-exit therefore records WHO
+// asked for it, and that record has to name the trigger rather than just prove
+// an exit happened.
+test('a self-exit records its trigger before the process leaves', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-selfexit-'))
+  const savedHome = process.env.DSH_HOME
+  const savedExit = process.exit
+  process.env.DSH_HOME = home
+  // The exit runs on a real timer; the process must not actually leave mid-test.
+  const exits = []
+  process.exit = (code) => { exits.push(code) }
+  try {
+    // A real browser request always carries a loopback socket peer; the guard
+    // fails closed without one, so this test states the peer it means.
+    const r = await callApiFull({ query: 'action=stop-self', method: 'POST', remoteAddress: '127.0.0.1' })
+    assert.equal(r.status, 200, 'got ' + JSON.stringify(r.json))
+    assert.equal(r.json.ok, true)
+    assert.deepEqual(exits, [0], 'the no-appExit path leaves through process.exit(0)')
+    const log = path.join(home, 'launcher', 'logs', 'dshim-selfexit.log')
+    assert.ok(fs.existsSync(log), 'a self-exit must leave a breadcrumb')
+    const text = fs.readFileSync(log, 'utf8')
+    assert.match(text, /trigger=stop-self/)
+    assert.match(text, /pid=\d+/)
+  } finally {
+    process.exit = savedExit
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})

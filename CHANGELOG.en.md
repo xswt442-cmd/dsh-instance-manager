@@ -3,49 +3,55 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.12 - 2026-09-17
+
+### Fixed
+
+- Auto port selection now confirms a candidate by actually listening on it, and the retry skips the port the previous attempt died on. A port that read free during the scan could still refuse the child's listen with EADDRINUSE, and the retry re-picked the same port — children died on boot while the panel sat on "Starting…".
+- The panel's "Starting…" state now resets unconditionally after the request settles, so a failed follow-up refresh can no longer leave the button disabled.
+
 ## 0.9.11 - 2026-09-17
 
 ### Fixed
 
-- **The panel swallowed the reason an action failed.** `refresh()` called `setError(null)` after every successful list read, and `startNew()` sets the error and then calls `refresh()`, so a "port already in use" or "start failed" message was cleared before it could be read — the click simply appeared to do nothing. Only a failed list read writes that state now; an action error persists until the next action.
-- As a result 0.9.10's occupied-port check returned `port_in_use` correctly from the host but showed nothing in the panel. It is visible now.
+- The panel no longer swallows why an action failed: `refresh()` cleared the error after every successful list read, so `startNew()`'s message was wiped before it could be read. Only a failed list read clears it now.
 
 ## 0.9.10 - 2026-09-17
 
 ### Added
 
-- Starting a new instance can name a port. The toolbar gains a port field: empty keeps the previous behaviour (the first free port in the managed range), a value starts on that port. A named port that is already in use answers `port_in_use` and names it, and the instance is **not** started elsewhere; a non-integer or out-of-range value answers 400 instead of silently falling back to auto.
-- The lost-scan/bind-race retry applies only to an auto-picked port. A named port is no longer retried on another port, which would start an instance the caller did not ask for.
+- Starting an instance can name a port: empty keeps the auto pick; a named port that is in use answers `port_in_use` and is not started elsewhere; a non-integer or out-of-range value answers 400 instead of silently falling back.
+- The lost-scan/bind-race retry applies only to an auto-picked port.
 
 ### Changed
 
-- The armed stop button is now an outlined warning (`--dsw-alias-state-warn-primary`) labelled "确认？" / "Confirm?". It was a solid error-red fill: red denotes a failure that already happened, whereas the stop has not run yet and the click is still reversible. The unarmed button keeps its original red outline and "Stop" label.
+- The armed stop button is an outlined warning labelled "Confirm?"; red denotes a failure that already happened, while the stop has not run yet and is still reversible. Unarmed it stays a red outline.
 
 ## 0.9.9 - 2026-09-17
 
 ### Fixed
 
-- The two-step stop confirmation applied only to the **current** instance (`item.current`). Stopping any other instance ran on the first click, which reads as "there is no confirmation". Every stoppable local instance now arms first, and the second click performs the stop.
-- The armed button label changed from "Confirm?" to "Click again", stating the next action instead of asking a question. The window stays 4 seconds and then cancels, so a stale armed state cannot fire a stop much later.
+- The two-step stop confirmation applied only to the current instance; every stoppable local instance now arms first.
+- The armed label changed from "Confirm?" to "Click again", and the armed window cancels itself after 4 seconds.
 
 ### Changed
 
-- The README header uses one consistent badge row: npm version, downloads, DSH compatibility range, Node version, license, and the Mini Utility Dock entry point.
+- The README header uses one consistent badge row.
 
 ## 0.9.8 - 2026-09-17
 
 ### Fixed
 
-- Clicking a row's `:port` no longer navigates to a bare root that must answer 401. Current DSH requires the per-process launch token on an instance root; the link pointed at `http://127.0.0.1:<port>/`, so newer hosts answered `authentication required; reopen the URL printed by dsh web`.
-- The link now targets a redirect endpoint, `?action=open&port=`: the host reads that instance's **current process** token from `$DSH_HOME/launcher/logs/server-<port>.out.log` and answers 303. The token is regenerated on every process start, so a port that has been restarted accumulates one line per process, and only the **last** line is current — following an earlier one yields an equally invalid token.
-- The log line is parsed as a URL rather than prefix-matched, and the scheme, loopback host, requested port, root path, and token presence are all checked; any mismatch counts as no token.
-- When no token can be read — the instance was not started by this host's launcher, or the log has rotated — the endpoint answers 409 `launch_token_unavailable` naming the `dsh web` URL to use, instead of silently redirecting to a bare root.
-- A remote instance row's port link performs the same exchange on that peer's own panel: the token is readable only on the host running the instance.
+- A row's `:port` link now targets `?action=open&port=`: the host reads that instance's current-process token from `server-<port>.out.log` and answers 303. DSH requires the per-process token on an instance root, so the bare root always answered 401.
+- The token is regenerated per process, so a restarted port accumulates one line per process and only the last one is current.
+- The log line is parsed as a URL and its scheme, loopback host, port, root path and token are all checked.
+- With no readable token (not started by this host's launcher, or a rotated log) the endpoint answers 409 `launch_token_unavailable` instead of a bare root.
+- A remote row's port link performs the same exchange on that peer's own panel.
 
 ### Security
 
-- The token never enters panel state and never appears in the link's `href`; it exists only in the 303 response's `Location` header, which carries `cache-control: no-store` and `referrer-policy: no-referrer`. DSH then exchanges it for a cookie and redirects to a clean `/`.
-- `action=open` passes the same browser authentication gate as `list` / `logs` / `sessions`; it is not a new unauthenticated endpoint.
+- The token exists only in the 303 `Location` header, with `cache-control: no-store` and `referrer-policy: no-referrer`; it never enters panel state or a link `href`.
+- `action=open` passes the same browser authentication gate as `list` / `logs` / `sessions`.
 
 ## 0.9.7 - 2026-09-16
 
