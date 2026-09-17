@@ -1,5 +1,12 @@
 # dsh-instance-manager
 
+[![npm version](https://img.shields.io/npm/v/dsh-instance-manager?color=4d6bfe&label=npm)](https://www.npmjs.com/package/dsh-instance-manager)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-instance-manager?label=downloads)](https://www.npmjs.com/package/dsh-instance-manager)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.0--rc.5-4d6bfe)](https://github.com/deepseek-ai/deepseek-harness)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-5fa04e)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![entry](https://img.shields.io/badge/entry-Mini%20Utility%20Dock-6b7280)](https://www.npmjs.com/package/dsh-mini-utility-dock)
+
 [中文](./README.md) | [English](./README.en.md)
 
 [![npm](https://img.shields.io/npm/v/dsh-instance-manager)](https://www.npmjs.com/package/dsh-instance-manager)

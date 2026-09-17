@@ -3,6 +3,17 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.9 - 2026-09-17
+
+### Fixed
+
+- The two-step stop confirmation applied only to the **current** instance (`item.current`). Stopping any other instance ran on the first click, which reads as "there is no confirmation". Every stoppable local instance now arms first, and the second click performs the stop.
+- The armed button label changed from "Confirm?" to "Click again", stating the next action instead of asking a question. The window stays 4 seconds and then cancels, so a stale armed state cannot fire a stop much later.
+
+### Changed
+
+- The README header uses one consistent badge row: npm version, downloads, DSH compatibility range, Node version, license, and the Mini Utility Dock entry point.
+
 ## 0.9.8 - 2026-09-17
 
 ### Fixed
