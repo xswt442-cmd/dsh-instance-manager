@@ -3,6 +3,13 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.11 - 2026-09-17
+
+### Fixed
+
+- **The panel swallowed the reason an action failed.** `refresh()` called `setError(null)` after every successful list read, and `startNew()` sets the error and then calls `refresh()`, so a "port already in use" or "start failed" message was cleared before it could be read — the click simply appeared to do nothing. Only a failed list read writes that state now; an action error persists until the next action.
+- As a result 0.9.10's occupied-port check returned `port_in_use` correctly from the host but showed nothing in the panel. It is visible now.
+
 ## 0.9.10 - 2026-09-17
 
 ### Added
