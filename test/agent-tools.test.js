@@ -190,8 +190,8 @@ test('instance_sessions surfaces unavailability and rejects bad ports', async ()
   assert.deepEqual(calls.sessions, [4000], 'only the valid port reaches the api')
 })
 
-// DTK/CI review finding: the reply may come from another instance, whose older
-// or newer route vocabulary is not this tool's output schema. An extra field
+// Review finding: the reply may come from another instance, whose older or
+// newer route vocabulary is not this tool's output schema. An extra field
 // fails `additionalProperties: false` in the tools service, and an absent
 // `sessions` array used to throw inside render().
 test('instance_sessions projects a foreign reply onto the declared keys', async () => {

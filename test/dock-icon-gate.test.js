@@ -3,8 +3,7 @@
 // between another plugin's `icon` string and this plugin's page. `safeDockIcon`
 // lives inside the client bundle's closure, so it can only be observed through
 // what actually reaches the button. These tests assert on the DOM, not on the
-// predicate, and reuse dsh-ballast's icon table so the three docks agree on
-// what an icon is.
+// predicate.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -152,7 +151,7 @@ test('a rejected icon still leaves the item identifiable and clickable', () => {
 
 test('update() cannot walk a poisoned icon past the gate', () => {
   const { dock, button } = bootDock()
-  const handle = dock.register(item('swapped', 'ballast', { order: 600, icon: '<svg></svg>' }))
+  const handle = dock.register(item('swapped', 'baseline', { order: 600, icon: '<svg></svg>' }))
   assert.equal(button('swapped').innerHTML, '<svg></svg>')
   handle.update({ icon: '<svg><script>alert(1)</script></svg>' })
   assert.equal(button('swapped').innerHTML, '', 'a re-render must not assign the new markup')

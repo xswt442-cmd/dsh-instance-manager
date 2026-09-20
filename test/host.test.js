@@ -65,12 +65,11 @@ test('isLoopbackName rejects foreign and empty names', () => {
   assert.equal(isLoopbackName('api.localhost'), false)
 })
 
-// Regression: the loopback predicates are shared with dsh-ballast and
-// dsh-treekeeper through a generated block (scripts/guard-parity.mjs compares
-// it). This repo previously carried a dead '::ffff:127.0.0.1' allowlist entry —
-// unreachable from the Origin path, because the WHATWG URL parser rewrites the
-// dotted form to hex — while ballast and treekeeper disagreed on both forms.
-// Both spellings must be loopback, on both paths, in all three plugins.
+// Regression: the loopback predicates arrive here through a generated block
+// (the `dsh-loopback-helpers` marker in lib/shared.js). This repo previously
+// carried a dead '::ffff:127.0.0.1' allowlist entry — unreachable from the
+// Origin path, because the WHATWG URL parser rewrites the dotted form to hex.
+// Both spellings must be loopback, on both paths.
 test('the IPv4-mapped IPv6 loopback form is loopback in both spellings', () => {
   for (const name of ['::ffff:127.0.0.1', '::ffff:7f00:1', '::FFFF:7F00:1']) {
     assert.ok(isLoopbackName(name), name)
