@@ -3,6 +3,12 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.9.13 - 2026-09-20
+
+### Changed
+
+- The instance list pins the instance serving the panel to the first row. The list previously ordered purely by ascending port with remote rows appended, so the current instance sat at whatever position its port number gave it rather than where it was most worth reading.
+
 ## 0.9.12 - 2026-09-17
 
 ### Fixed
