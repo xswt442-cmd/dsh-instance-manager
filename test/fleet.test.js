@@ -1,7 +1,7 @@
 // Unit tests for the fleet peer-link helpers in lib/fleet.js (F2).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parsePeers, LINK_PATH, createQueryResponder, FleetLinks } from '../lib/fleet.js'
+import { parsePeers, LINK_PATH, createQueryResponder, FleetLinks, QUERY_LIMIT } from '../lib/fleet.js'
 import { normalizePort } from '../lib/shared.js'
 
 test('parsePeers parses id@origin pairs into ws link descriptors', () => {
@@ -133,7 +133,10 @@ class MemSocket {
   close() { this.readyState = 3; this.emit('close') }
   terminate() { this.close() }
 }
-class MemWSS { handleUpgrade(req, socket, head, cb) { cb(socket) } }
+class MemWSS {
+  constructor(options) { this.options = options }
+  handleUpgrade(req, socket, head, cb) { cb(socket) }
+}
 
 const wireMutualPeers = async () => {
   const dials = []
@@ -190,6 +193,74 @@ test('a mutually-peered pair answers one fleet query without amplification', asy
   } finally {
     A.hub.dispose(); B.hub.dispose()
   }
+})
+
+// ---- one link may not answer another link's question -------------------
+// A `query-result` used to be matched by reqId alone, so any socket that had
+// cleared the bearer could settle a query somebody else was waiting on — the
+// ids are a counter plus a timestamp, which is not a secret.
+const buildHub = () => {
+  const answered = []
+  const hub = new FleetLinks({
+    WebSocket: MemSocket,
+    WebSocketServer: MemWSS,
+    safeTokenEqual: (x, y) => x === y,
+    fleetId: () => 'fleet-a',
+    resolveToken: async () => 'tok',
+    answerQuery: async (q) => { answered.push(q); return { ok: true, kind: q.kind } }
+  }, [])
+  return { hub, answered }
+}
+
+const settleAfterOneTurn = async () => { await new Promise((resolve) => setTimeout(resolve, 0)) }
+
+test('a query-result settles its own socket\'s query only', async () => {
+  const { hub } = buildHub()
+  const asked = new MemSocket()
+  const other = new MemSocket()
+  hub.attachInbound(asked)
+  hub.attachInbound(other)
+
+  const settled = []
+  hub.pending.set('q7-known', { resolve: (r) => settled.push(r), timer: undefined, socket: asked })
+
+  other.emit('message', JSON.stringify({ type: 'query-result', reqId: 'q7-known', result: { ok: true, forged: true } }))
+  await settleAfterOneTurn()
+  assert.deepEqual(settled, [], 'a different socket must not settle this query')
+  assert.equal(hub.pending.has('q7-known'), true, 'it stays pending so the real answer can still land')
+
+  asked.emit('message', JSON.stringify({ type: 'query-result', reqId: 'q7-known', result: { ok: true, real: true } }))
+  await settleAfterOneTurn()
+  assert.deepEqual(settled, [{ ok: true, real: true }])
+  hub.dispose()
+})
+
+test('the upgrade server caps one frame at a documented byte count', () => {
+  const { hub } = buildHub()
+  assert.ok(hub.server.options.maxPayload > 0, 'a peer must not be able to stream an unbounded frame body')
+  hub.dispose()
+})
+
+test('a peer that floods query frames is answered rate_limited, not left hanging', async () => {
+  const { hub, answered } = buildHub()
+  const peer = new MemSocket()
+  hub.attachInbound(peer)
+  const replies = []
+  peer.remote = { readyState: WS_OPEN, emit: (ev, text) => { if (ev === 'message') replies.push(JSON.parse(text)) } }
+
+  const total = QUERY_LIMIT + 5
+  for (let i = 0; i < total; i++) {
+    peer.emit('message', JSON.stringify({ type: 'query', reqId: 'q' + i, query: { kind: 'ping' } }))
+  }
+  await settleAfterOneTurn()
+
+  assert.equal(answered.length, QUERY_LIMIT, 'the window admits exactly its budget')
+  const limited = replies.filter((r) => r.result && r.result.code === 'rate_limited')
+  assert.equal(limited.length, 5, 'the excess is refused rather than silently dropped')
+  for (const reply of limited) {
+    assert.equal(typeof reply.reqId, 'string', 'each refusal still carries the id that asked')
+  }
+  hub.dispose()
 })
 
 test('a fleet query nested inside an inbound fleet answer is refused, not forwarded', async () => {
