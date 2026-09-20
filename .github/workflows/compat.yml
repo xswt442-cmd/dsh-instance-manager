@@ -176,7 +176,7 @@ jobs:
           if (-not $bundlePath.StartsWith('/')) { $bundlePath = "/$bundlePath" }
           $clientCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' @cookieArgs "http://127.0.0.1:3129$bundlePath"
           if ($clientCode -ne '200') { Write-Error "advertised client bundle not served" }
-          # --- request-guard regression checks (see README 安全模型) ---
+          # --- request checks (see README 安全模型) ---
           function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
             & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @cookieArgs @curlArgs $url
           }
@@ -188,9 +188,16 @@ jobs:
           # stop parses its port with normalizePort, not Number(): '1e3' must
           # be rejected as a bad request, never forwarded to port 1000.
           if ((ApiCode POST "$b`?action=stop&port=1e3") -ne '400') { Write-Error 'guard regression: stop&port=1e3 must be 400' }
-          if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'guard regression: foreign Origin must be 403' }
-          if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'guard regression: cross-site metadata must be 403' }
-          if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'guard regression: non-loopback Host must be 403' }
+          # The three header checks below assert the DEPLOYED request fence, not this plugin's
+          # own embedded guard: a host that mounts the Connection service fences with its
+          # Host/Origin rule plus the signed browser cookie, and the embedded guard only
+          # runs where no Connection service is mounted. Keep them as end-to-end assertions
+          # of the boundary a caller actually reaches; the guard itself is covered by the
+          # unit tests (and, for the no-Connection route, by the route-level test).
+
+          if ((ApiCode POST "$b`?action=stop-all" @('-H','Origin: https://evil.example')) -ne '403') { Write-Error 'the deployed API must reject a foreign Origin (403)' }
+          if ((ApiCode GET "$b`?action=list" @('-H','sec-fetch-site: cross-site')) -ne '403') { Write-Error 'the deployed API must reject a cross-site request (403)' }
+          if ((ApiCode GET "$b`?action=list" @('-H','Host: rebound.example')) -ne '403') { Write-Error 'the deployed API must reject a rebound Host (403)' }
           # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
           $start = ApiJson POST "$b`?action=start"
           if (-not $start.ok -or -not $start.pid) { Write-Error "start read-back failed: $($start | ConvertTo-Json -Compress)" }
@@ -267,7 +274,7 @@ jobs:
           bundle_path=$(grep -oE '/plugins/[^"< ]*dsh-instance-manager/client\.js[^"< ]*' "$shell_html" | head -n 1 | sed 's/&amp;/\&/g' || true)
           [ -n "$bundle_path" ] || { echo "::error::shell did not advertise client bundle"; kill "$pid" 2>/dev/null; exit 1; }
           [ "$(code "http://127.0.0.1:3129$bundle_path")" = "200" ] || { echo "::error::advertised client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
-          # --- request-guard regression checks (see README 安全模型) ---
+          # --- request checks (see README 安全模型) ---
           b="http://127.0.0.1:3129/dsh-instance-manager/api"
           [ "$(code -X GET "$b?action=start")" = "405" ] || { echo "::error::guard regression: GET start must be 405"; exit 1; }
           [ "$(code -X GET "$b?action=stop&port=1")" = "405" ] || { echo "::error::guard regression: GET stop must be 405"; exit 1; }
@@ -276,9 +283,16 @@ jobs:
           # stop parses its port with normalizePort, not Number(): '1e3' must
           # be rejected as a bad request, never forwarded to port 1000.
           [ "$(code -X POST "$b?action=stop&port=1e3")" = "400" ] || { echo "::error::guard regression: stop&port=1e3 must be 400"; kill "$pid" 2>/dev/null || true; exit 1; }
-          [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::guard regression: foreign Origin must be 403"; exit 1; }
-          [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::guard regression: cross-site metadata must be 403"; exit 1; }
-          [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::guard regression: non-loopback Host must be 403"; exit 1; }
+          # The three header checks below assert the DEPLOYED request fence, not this plugin's
+          # own embedded guard: a host that mounts the Connection service fences with its
+          # Host/Origin rule plus the signed browser cookie, and the embedded guard only
+          # runs where no Connection service is mounted. Keep them as end-to-end assertions
+          # of the boundary a caller actually reaches; the guard itself is covered by the
+          # unit tests (and, for the no-Connection route, by the route-level test).
+
+          [ "$(code -X POST -H 'Origin: https://evil.example' "$b?action=stop-all")" = "403" ] || { echo "::error::the deployed API must reject a foreign Origin (403)"; exit 1; }
+          [ "$(code -H 'sec-fetch-site: cross-site' "$b?action=list")" = "403" ] || { echo "::error::the deployed API must reject a cross-site request (403)"; exit 1; }
+          [ "$(code -H 'Host: rebound.example' "$b?action=list")" = "403" ] || { echo "::error::the deployed API must reject a rebound Host (403)"; exit 1; }
           # --- start read-back regression: spawn -> ok+pid -> reachable -> stop ---
           start_json=$(curl -s --noproxy '*' "${cookie_args[@]}" -X POST "$b?action=start" --max-time 60)
           echo "$start_json" | grep -q '"pid"' || { echo "::error::start read-back failed: $start_json"; kill "$pid" 2>/dev/null || true; exit 1; }
