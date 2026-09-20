@@ -56,11 +56,11 @@ Peer 配置是单向的；需要双向可见时，两端分别配置对方。远
 
 ## 安全
 
-- 本地 API 拒绝跨站 Origin、非 loopback Host 和不安全的 Fetch Metadata。
+- 本插件自带的本地守卫拒绝跨站 Origin、非 loopback Host 和不安全的 Fetch Metadata；宿主挂载了 Connection 时由它承担这一层。
 - 写操作仅接受 POST；端口必须是 1–65535 的十进制整数。
 - 是否需要 Fleet Bearer 由**真实 TCP 对端地址（socket）**判定，而非仅看 Host 头：对端非回环**或** Host 非回环，二者满足其一即要求 bearer。伪造 `Host: 127.0.0.1` 无法隐藏非回环对端；对端地址缺失时直接拒绝。缺少或无法解析 token 时拒绝。
 - Fleet token 没有操作级权限划分。持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
-- 浏览器 API 与事件流在 DSH 0.1.2-rc.1+ 中复用 Connection 的签名 cookie；内部实例确认与转发只走严格 loopback 探测动作。
+- 浏览器 API 与事件流在 DSH 0.1.0-rc.7+ 中复用 Connection 的签名 cookie，准入由 Connection 的 Host/Origin 校验与 cookie 判定，插件自带守卫此时不参与；内部实例确认与转发只走严格 loopback 探测动作。
 - SSE 仅向本机开放。
 
 ## 开发

@@ -56,11 +56,11 @@ Peer configuration is directional; configure each side when both machines should
 
 ## Security
 
-- The local API rejects cross-site origins, non-loopback hosts, and unsafe Fetch Metadata.
+- This plugin's own local guard rejects cross-site origins, non-loopback hosts, and unsafe Fetch Metadata; a host that mounts Connection carries that layer instead.
 - Mutating actions are POST-only; ports must be decimal integers from 1 to 65535.
 - Whether a fleet bearer is required is decided by the **real TCP peer address (socket), not just the Host header**: an off-loopback peer OR an off-loopback Host triggers the bearer. A forged `Host: 127.0.0.1` cannot hide an off-loopback peer, and a missing peer address is rejected outright. Requests fail closed when the token is missing or unresolved.
 - The fleet token has no action-level scopes. A holder can start or stop local instances and read session information, so grant it only to trusted devices.
-- On DSH 0.1.2-rc.1+, browser APIs and event streams reuse the Connection signed cookie; instance confirmation and forwarding use private strict-loopback probes.
+- On DSH 0.1.0-rc.7+, browser APIs and event streams reuse the Connection signed cookie, so admission is decided by Connection's Host/Origin fence and cookie and this plugin's own guard no longer takes part; instance confirmation and forwarding use private strict-loopback probes.
 - SSE remains local-only.
 
 ## Development
