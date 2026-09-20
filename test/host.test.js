@@ -21,6 +21,7 @@ import {
   tailFile,
   unionPorts,
   summarizeSessions,
+  orderInstances,
   awaitChild,
   managedLocalPorts,
   diffManagedPorts,
@@ -356,6 +357,56 @@ test('unionPorts merges the sweep range with out-of-range heartbeat ports', () =
     'dedupes, keeps only valid integer ports, sorts ascending'
   )
   assert.deepEqual(unionPorts(3080, 3080, [250, 80]), [80, 250, 3080])
+})
+
+// ---- fleet list order -----------------------------------------------------
+
+test('orderInstances pins the current instance first', () => {
+  const rows = [
+    { port: 3080, current: false },
+    { port: 3081, current: false },
+    { port: 3082, current: true },
+    { port: 3083, current: false }
+  ]
+  assert.deepEqual(orderInstances(rows).map((r) => r.port), [3082, 3080, 3081, 3083])
+})
+
+test('orderInstances sorts everything else by ascending port, local or remote', () => {
+  const rows = [
+    { port: 3090, current: false },
+    { port: 3082, current: false, remote: true, source: 'office' },
+    { port: 3091, current: false },
+    { port: 3080, current: false, remote: true, source: 'office' }
+  ]
+  assert.deepEqual(orderInstances(rows).map((r) => r.port), [3080, 3082, 3090, 3091])
+})
+
+test('orderInstances lets port outrank the source id', () => {
+  // A peer row without a lower port must not jump ahead of a local one: the
+  // two share a port column, and breaking the ascending scan is what the
+  // current-row pin exists to avoid.
+  const rows = [
+    { port: 3080, current: false },
+    { port: 3090, current: false, remote: true, source: 'aaa' }
+  ]
+  assert.deepEqual(orderInstances(rows).map((r) => r.port), [3080, 3090])
+})
+
+test('orderInstances is stable across equals and never mutates its input', () => {
+  // Two machines can both list :3080; the source id keeps them from swapping
+  // position between polls.
+  const rows = [
+    { port: 3080, current: false, remote: true, source: 'zulu' },
+    { port: 3080, current: false, remote: true, source: 'alpha' }
+  ]
+  const original = rows.slice()
+  assert.deepEqual(orderInstances(rows).map((r) => r.source), ['alpha', 'zulu'])
+  assert.deepEqual(rows, original, 'input order untouched')
+  assert.deepEqual(orderInstances(undefined), [])
+  assert.deepEqual(orderInstances(null), [])
+  // Rows missing port/current/remote sort without throwing; the current row
+  // still wins.
+  assert.equal(orderInstances([{ current: true }, {}])[0].current, true)
 })
 
 // ---- session summaries ----------------------------------------------------

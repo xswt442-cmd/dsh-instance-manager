@@ -14,7 +14,7 @@ Instance manager for DSH Web. It shows one status row per local dsh web instance
 
 ## Features
 
-- One row per instance: port, PID, uptime, live session count, resident memory, version, and whether it is the instance hosting this panel.
+- One row per instance: port, PID, uptime, live session count, resident memory, version, and whether it is the instance hosting this panel. The current instance always sorts first; everything else follows by ascending port.
 - Start a new instance. An empty port means the host picks the first free port in the managed range (3080-3129 by default); a named port is used exactly, and one that is already in use is reported instead of starting somewhere else.
 - Open an instance: a row's `:port` navigates to that instance's UI. DSH requires the per-process launch token on an instance root, so the link targets a redirect endpoint: the host reads that instance's current token and answers 303, and the token never enters panel state or the link itself. When the instance was not started by this host's launcher there is no token to read, and the endpoint answers `launch_token_unavailable` naming the `dsh web` URL to use.
 - Stop one, the current, or all local instances; each stop goes through the target instance's own graceful shutdown. Remote rows are read-only and are never part of stop-all.
