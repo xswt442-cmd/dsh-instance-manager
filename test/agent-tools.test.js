@@ -189,3 +189,72 @@ test('instance_sessions surfaces unavailability and rejects bad ports', async ()
   }
   assert.deepEqual(calls.sessions, [4000], 'only the valid port reaches the api')
 })
+
+// DTK/CI review finding: the reply may come from another instance, whose older
+// or newer route vocabulary is not this tool's output schema. An extra field
+// fails `additionalProperties: false` in the tools service, and an absent
+// `sessions` array used to throw inside render().
+test('instance_sessions projects a foreign reply onto the declared keys', async () => {
+  const declaration = byName(buildAgentTools(identity, makeApi().api)).instance_sessions
+  const declared = Object.keys(declaration.output.schema.properties).sort()
+
+  const { api } = makeApi({
+    sessions: async () => ({
+      ok: true,
+      port: 3080,
+      total: 1,
+      sessions: [{ id: 'a', createdAt: 1 }],
+      // Fields this tool never declared: an older panel route answered them,
+      // and a newer one may add more.
+      currentPort: 3080,
+      selfVersion: '0.7.0',
+      cursor: null
+    })
+  })
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const v = await def.execute({ port: 3080 })
+  for (const key of Object.keys(v)) {
+    assert.ok(declared.includes(key), `${key} is not a declared output property`)
+  }
+})
+
+test('instance_sessions survives a reply with no sessions array', async () => {
+  const { api } = makeApi({ sessions: async () => ({ ok: true, port: 3080 }) })
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const v = await def.execute({ port: 3080 })
+  assert.equal(v.ok, true)
+  assert.deepEqual(v.sessions, [])
+  assert.equal(v.total, 0, 'the fallback counts what it actually returns')
+  // render() indexed `v.sessions.length` and threw here before the projection.
+  assert.match(def.output.render({}, v)[0].text, /no active sessions/)
+})
+
+test('instance_sessions drops rows it cannot promise, instead of padding them', async () => {
+  const { api } = makeApi({
+    sessions: async () => ({
+      ok: true,
+      sessions: [
+        { id: 'complete', createdAt: 10, cwd: '/w', events: 2 },
+        { id: 'no-created-at' },
+        { id: '', createdAt: 3 },
+        null
+      ]
+    })
+  })
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const v = await def.execute({ port: 3080 })
+  assert.deepEqual(v.sessions, [{ id: 'complete', createdAt: 10, cwd: '/w', events: 2 }])
+  assert.equal(v.total, 1)
+})
+
+test('instance_sessions reports a failure reply as not-ok without inventing rows', async () => {
+  const { api } = makeApi({ sessions: async () => ({ ok: false, port: 4000 }) })
+  const def = byName(buildAgentTools(identity, api)).instance_sessions
+
+  const v = await def.execute({ port: 4000 })
+  assert.equal(v.ok, false, 'a falsy-but-not-boolean reply must still read as false')
+  assert.match(def.output.render({}, v)[0].text, /failed/)
+})
