@@ -63,8 +63,8 @@ jobs:
   # The two shared host fragments are verified locally by `npm test`, which runs
   # loopback:check / guard:check against the pinned dock version. A cross-repo
   # comparison is not run here: its property cannot hold while a peer checkout
-  # resolves to a different branch. scripts/guard-parity.mjs stays available as a
-  # manual diagnostic for when all three checkouts share a branch.
+  # resolves to a different branch. `dsh-plugin-parity` (from the dock) stays available as a
+  # manual diagnostic for when every checkout shares a branch.
   boot-check:
     name: boot dsh web with bundle (${{ matrix.os }}, dsh${{ matrix.dsh-spec }})
     strategy:
