@@ -17,6 +17,9 @@ coverage/
 *.tgz
 *.tar.gz
 .npm/
+# npm regenerates this on every install; tracking it would only pin
+# devDependency tarballs, which mean nothing to the published library.
+package-lock.json
 
 # Environment & secrets
 .env
