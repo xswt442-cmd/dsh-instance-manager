@@ -65,13 +65,7 @@ Peer 配置是单向的；需要双向可见时，两端分别配置对方。远
 
 ## 开发
 
-不要把工作树以符号链接挂入运行中的 DSH profile。使用快照部署：
-
-```powershell
-powershell -File scripts\deploy-profile.ps1
-```
-
-提交前运行：
+工作树用 `scripts/deploy-profile.ps1` 快照部署进运行中的 DSH profile，直接挂符号链接会出问题。提交前运行：
 
 ```sh
 npm test

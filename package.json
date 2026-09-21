@@ -31,21 +31,6 @@
       "platform": "web"
     }
   },
-  "dshhub": {
-    "schemaVersion": 1,
-    "displayName": "instance-manager",
-    "summary": "统一查看并停止本机 3080–3129 端口的 dsh web 实例：端口、PID、运行时长、会话数，优雅退出（会话落盘），含启动新实例与一键全部结束；入口位于 Mini Utility Dock。",
-    "categories": ["dev", "Web UI"],
-    "surfaces": ["host", "web"],
-    "capabilities": {},
-    "compatibility": {
-      "dsh": ">=0.1.0-rc.5",
-      "node": ">=20"
-    },
-    "permissions": {
-      "network": ["http://127.0.0.1:*"]
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xswt442-cmd/dsh-instance-manager.git"

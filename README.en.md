@@ -65,13 +65,7 @@ Peer configuration is directional; configure each side when both machines should
 
 ## Development
 
-Do not symlink the working tree into a running DSH profile. Deploy a snapshot instead:
-
-```powershell
-powershell -File scripts\deploy-profile.ps1
-```
-
-Before committing:
+The working tree is deployed into a running DSH profile as a snapshot by `scripts/deploy-profile.ps1`; symlinking it does not work. Before committing:
 
 ```sh
 npm test
