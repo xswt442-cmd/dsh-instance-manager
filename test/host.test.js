@@ -537,6 +537,11 @@ test('parsePortRange honors the env override and falls back silently', () => {
   assert.deepEqual(parsePortRange('5000-4000'), { min: 3080, max: 3129 })
   assert.deepEqual(parsePortRange('0-100'), { min: 3080, max: 3129 })
   assert.deepEqual(parsePortRange('1-70000'), { min: 3080, max: 3129 })
+  // An over-wide band is refused rather than obeyed: the local probe fans out
+  // over every port in the range, so `1-65535` would be a 65k-way scan.
+  assert.deepEqual(parsePortRange('1-65535'), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortRange('3080-4104'), { min: 3080, max: 3129 }, '1025-wide band is over the bound')
+  assert.deepEqual(parsePortRange('3080-4103'), { min: 3080, max: 4103 }, '1024-wide band is still allowed')
 })
 
 // ---- tailFile ------------------------------------------------------------
