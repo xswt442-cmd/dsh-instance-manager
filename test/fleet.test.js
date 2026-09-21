@@ -18,6 +18,15 @@ test('parsePeers keeps https origins on wss and tolerates bare hosts', () => {
   assert.equal(peers[1].origin, 'http://10.0.0.9', 'scheme-less origins default to http')
 })
 
+test('parsePeers rejects origins carrying userinfo', () => {
+  // A peer authenticates with the fleet bearer token; credentials in the URL
+  // would travel in the wsUrl and surface in error details.
+  assert.deepEqual(parsePeers('a@http://user:pass@192.168.1.20:3080'), [])
+  assert.deepEqual(parsePeers('a@user:pass@host:3080'), [])
+  // A path segment containing '@' is not userinfo.
+  assert.equal(parsePeers('a@http://host:3080/p@th').length, 1)
+})
+
 test('parsePeers drops junk, dedupes ids, strips trailing slashes, caps', () => {
   assert.deepEqual(parsePeers(''), [])
   assert.deepEqual(parsePeers('no-at-sign, @no-id, id@'), [])
