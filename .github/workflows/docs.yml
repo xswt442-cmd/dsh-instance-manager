@@ -20,6 +20,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # docs:check is a bin of the pinned dsh-mini-utility-dock dependency, so
+      # this job needs node_modules like every other workflow now.
+      - run: npm install --ignore-scripts
       - run: npm run docs:check
       - name: require paired edits
         if: env.DOCS_BASE != ''
