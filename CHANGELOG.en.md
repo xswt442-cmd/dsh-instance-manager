@@ -3,6 +3,20 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.10.0 - 2026-09-23
+
+### Fixed
+
+- Bound the outbound fleet handshake at 10s. A peer that accepts TCP but never returns 101 left the socket in CONNECTING forever: close never fires, the backoff loop never restarts, and the peer reads as permanently unreachable with no trace.
+- Cap the events stream at 8 subscribers and drop the slowest writer when `write()` reports backpressure. Every subscriber used to trigger a full instance listing on connect, and one page could open unlimited streams.
+- Size-cap `dshim-crash.log` and `dshim-selfexit.log` at 1MB, keeping the newest half. The launcher-owned `server-<port>.out.log` is deliberately excluded: the child holds that fd, so a rename would fork the file behind the writer's back.
+- `stopForAgent` validates ports through the shared `normalizePort` instead of a private reimplementation of the same rule.
+- A failing `ws` resolution logs a line; it used to be swallowed, leaving the fleet link permanently offline with no diagnostics.
+
+### Changed
+
+- The declared minimum DSH version is now `>=0.1.2-rc.1`: the previously declared `0.1.0-rc.5` does not exist on npm, and CI never covered it.
+
 ## 0.9.13 - 2026-09-20
 
 ### Changed
