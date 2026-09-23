@@ -97,6 +97,13 @@ jobs:
           npm --version
           pnpm --version 2>/dev/null || echo "pnpm: absent"
           command -v corepack >/dev/null 2>&1 && corepack --version || echo "corepack: absent"
+      # On this machine the oldest line boots with a complete PATH and dies
+      # exactly the way the job does when the global prefix (npm, npx, pnpm, the
+      # dsh binary itself) is taken off it, while 0.1.5-rc.3 boots either way.
+      # pnpm is the one of those the runner images no longer ship, so install it
+      # and see whether the oldest line comes back. Keep this only if it does.
+      - name: install pnpm
+        run: npm i -g pnpm
       - name: install dsh
         run: npm i -g "@deepseek-ai/dsh${{ matrix.dsh-spec }}"
       - name: register bundle into a temp profile (windows)
