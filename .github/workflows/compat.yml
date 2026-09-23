@@ -71,15 +71,28 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # Keep the oldest declared RC line explicit while validating the new
-        # release candidate independently from the moving latest channel.
-        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.1', '@latest']
+        # TEMPORARY diagnostic matrix (reverted by the next commit): the middle
+        # spec is the self-consistent 0.1.5-rc.3 release instead of the rc.1
+        # spec, which floats its sub-dependencies up to rc.3. Same runner, same
+        # three specs, so a green rc.3 next to a red latest separates a
+        # root-version defect from an environment one.
+        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3', '@latest']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # Diagnostic: dsh prepares a profile's plugins with pnpm, and pnpm is not
+      # a dependency of the npm package. Record what the runner actually has so
+      # a boot failure can be told apart from a missing toolchain.
+      - name: report toolchain
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          pnpm --version 2>/dev/null || echo "pnpm: absent"
+          command -v corepack >/dev/null 2>&1 && corepack --version || echo "corepack: absent"
       - name: install dsh
         run: npm i -g "@deepseek-ai/dsh${{ matrix.dsh-spec }}"
       - name: register bundle into a temp profile (windows)
@@ -142,6 +155,12 @@ jobs:
           if (-not $ready) {
             Get-Content $launchOut -ErrorAction SilentlyContinue
             Get-Content $launchErr -ErrorAction SilentlyContinue
+            Write-Host '--- profile projection: is the entry there? ---'
+            Get-ChildItem "$env:DSH_HOME\profiles\node_modules\@deepseek-ai" -ErrorAction SilentlyContinue |
+              Select-Object -First 30 Name, LinkType, Target | Format-Table -AutoSize | Out-String | Write-Host
+            Write-Host '--- global install: is the package reachable at all? ---'
+            & npm ls -g --depth=0 2>&1 | Out-String | Write-Host
+            & npm ls -g "@deepseek-ai/dsh-sandbox-local" "@deepseek-ai/dsh-base" 2>&1 | Out-String | Write-Host
             Write-Error "dsh web did not become ready"
           }
           $cookieJar = Join-Path $env:RUNNER_TEMP 'dsh-cookies.txt'
@@ -248,6 +267,11 @@ jobs:
           if [ "$ready" != "1" ]; then
             echo "::error::dsh web did not become ready"
             cat "$launch_log" || true
+            echo '--- profile projection: is the entry there? ---'
+            ls -l "$DSH_HOME/profiles/node_modules/@deepseek-ai" 2>/dev/null | head -30 || true
+            echo '--- global install: is the package reachable at all? ---'
+            npm ls -g --depth=0 2>&1 | head -20 || true
+            npm ls -g @deepseek-ai/dsh-sandbox-local @deepseek-ai/dsh-base 2>&1 | head -20 || true
             kill "$pid" 2>/dev/null || true
             exit 1
           fi
