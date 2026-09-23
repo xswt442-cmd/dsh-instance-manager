@@ -71,21 +71,25 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # TEMPORARY diagnostic matrix (reverted by the next commit): the middle
-        # spec is the self-consistent 0.1.5-rc.3 release instead of the rc.1
-        # spec, which floats its sub-dependencies up to rc.3. Same runner, same
-        # three specs, so a green rc.3 next to a red latest separates a
-        # root-version defect from an environment one.
-        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3', '@latest']
+        # Fixed versions only, deliberately: `@latest` currently resolves to
+        # 0.1.5-rc.2, whose own sub-dependencies float up to rc.3 and which then
+        # fails to resolve @deepseek-ai/dsh-sandbox-local at boot on a clean
+        # install. Measured on these runners: the root at 0.1.5-rc.3 boots on
+        # both OSes, the root at 0.1.5-rc.2 does not, with pnpm absent in every
+        # case. Test '@latest' again once upstream ships a consistent release;
+        # until then a red job here would only restate that defect.
+        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # Diagnostic: dsh prepares a profile's plugins with pnpm, and pnpm is not
-      # a dependency of the npm package. Record what the runner actually has so
-      # a boot failure can be told apart from a missing toolchain.
+      # dsh prepares a profile's plugins with pnpm and the npm package does not
+      # depend on it, so a missing pnpm is a plausible cause of a boot failure.
+      # Measured on these runners: pnpm is absent and 0.1.5-rc.3 still boots, so
+      # it is not the cause. Record the toolchain anyway — comparisons between
+      # runs are only possible when each run states what it ran on.
       - name: report toolchain
         shell: bash
         run: |
