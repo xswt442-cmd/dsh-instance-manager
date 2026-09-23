@@ -78,6 +78,14 @@ jobs:
         # both OSes, the root at 0.1.5-rc.2 does not, with pnpm absent in every
         # case. Test '@latest' again once upstream ships a consistent release;
         # until then a red job here would only restate that defect.
+        #
+        # The 0.1.2-rc.1 entry is a different story and is not yet explained: it
+        # fails on both runners (prints its launch URL, then never answers) while
+        # the very same version boots against this same bundle in about a second
+        # on a developer machine — reproduced by hand, with pnpm on PATH and with
+        # it removed, both times fine. So the oldest declared line is red for a
+        # reason that has nothing to do with this plugin, and the failure is
+        # left visible rather than silenced.
         dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3']
     runs-on: ${{ matrix.os }}
     steps:
@@ -97,13 +105,6 @@ jobs:
           npm --version
           pnpm --version 2>/dev/null || echo "pnpm: absent"
           command -v corepack >/dev/null 2>&1 && corepack --version || echo "corepack: absent"
-      # On this machine the oldest line boots with a complete PATH and dies
-      # exactly the way the job does when the global prefix (npm, npx, pnpm, the
-      # dsh binary itself) is taken off it, while 0.1.5-rc.3 boots either way.
-      # pnpm is the one of those the runner images no longer ship, so install it
-      # and see whether the oldest line comes back. Keep this only if it does.
-      - name: install pnpm
-        run: npm i -g pnpm
       - name: install dsh
         run: npm i -g "@deepseek-ai/dsh${{ matrix.dsh-spec }}"
       - name: register bundle into a temp profile (windows)
