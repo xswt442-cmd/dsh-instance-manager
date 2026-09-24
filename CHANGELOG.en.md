@@ -5,6 +5,10 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+### Added
+
+- New `dshim-requests.log`: every accepted mutation (`start` / `stop` / `stop-all` / `stop-self`) records the socket peer, the admission path (`local-browser` / `browser-lan` / `fleet-peer` / `host-probe`), the request's own `Host` / `Origin` / `Referer` / `User-Agent`, the target port and the result. The self-exit breadcrumb says the process was *asked* to leave; it cannot say who asked. A panel click necessarily carries a same-origin Origin, a Referer and a browser User-Agent, while a script usually carries none of them, and that line is what separates the two. Cookies and Authorization are never read and never written.
+
 ### Changed
 
 - Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and `0.1.7-rc.1`.

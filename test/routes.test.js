@@ -24,14 +24,16 @@ const LINK_PATH = '/dsh-instance-manager/link'
 // `config` is what the profile entry hands to apply() as the second argument
 // (0.1.7-rc.1 and later); leaving it undefined reproduces the older lines,
 // where the settings service is the only source of these values.
-const mount = ({ upgradeSupport = true, connection, config } = {}) => {
+const mount = ({ upgradeSupport = true, connection, config, port } = {}) => {
   const routes = []
   const upgrades = []
   const getCalls = []
   const listeners = new Map()
   const webServer = {
-    // Undefined port: registryFile() returns null, so apply touches no files.
-    port: undefined,
+    // Undefined by default: registryFile() returns null, so apply touches no
+    // files. A test that needs the serving-port identity — the self-stop
+    // branch, and the same-origin Origin check that gates it — states it.
+    port,
     register(route) {
       routes.push(route)
       return () => { const at = routes.indexOf(route); if (at !== -1) routes.splice(at, 1) }
@@ -264,8 +266,8 @@ const callApi = async (query, method = 'GET') => {
 
 // Full control over the request: forge an off-loopback socket peer, set a
 // bearer, or drop the socket entirely to exercise the trust-boundary gates.
-const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {}, connection, config }) => {
-  const { routes, dispose } = mount({ connection, config })
+const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {}, connection, config, port }) => {
+  const { routes, dispose } = mount({ connection, config, port })
   try {
     const route = routes.find((r) => r.path === API_PATH)
     let status = 0
@@ -665,6 +667,63 @@ test('a self-exit records its trigger before the process leaves', async () => {
     const text = fs.readFileSync(log, 'utf8')
     assert.match(text, /trigger=stop-self/)
     assert.match(text, /pid=\d+/)
+  } finally {
+    process.exit = savedExit
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+// The trigger breadcrumb still cannot separate the two callers that matter:
+// the panel's own stop button and a local script both send `stop` for the
+// serving port. Provenance is what separates them, so the same event has to be
+// recorded twice — once as "this process was asked to leave", once as "by whom,
+// through which door". A page cannot avoid sending Origin/Referer/User-Agent;
+// a script can, and the difference is the answer.
+test('an accepted stop records who asked and how the request got in', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-requests-'))
+  const savedHome = process.env.DSH_HOME
+  const savedExit = process.exit
+  process.env.DSH_HOME = home
+  const exits = []
+  process.exit = (code) => { exits.push(code) }
+  try {
+    // The exact shape that took a served instance down: a same-origin POST
+    // from the page itself, asking for the port it is already on.
+    const r = await callApiFull({
+      query: 'action=stop&port=3600',
+      method: 'POST',
+      port: 3600,
+      host: '127.0.0.1:3600',
+      remoteAddress: '127.0.0.1',
+      headers: {
+        origin: 'http://127.0.0.1:3600',
+        referer: 'http://127.0.0.1:3600/',
+        'user-agent': 'Mozilla/5.0 (panel probe)'
+      }
+    })
+    assert.equal(r.status, 200, 'got ' + JSON.stringify(r.json))
+    assert.equal(r.json.note, 'stopping this instance')
+    assert.deepEqual(exits, [0], 'the no-appExit path leaves through process.exit(0)')
+
+    const log = path.join(home, 'launcher', 'logs', 'dshim-requests.log')
+    assert.ok(fs.existsSync(log), 'an accepted mutation must leave a provenance line')
+    const text = fs.readFileSync(log, 'utf8')
+    assert.match(text, /action=stop /)
+    assert.match(text, /instance=3600/)
+    assert.match(text, /target=3600/)
+    assert.match(text, /via=local-browser/)
+    assert.match(text, /peer=127\.0\.0\.1/)
+    assert.match(text, /origin=http:\/\/127\.0\.0\.1:3600/)
+    assert.match(text, /referer=http:\/\/127\.0\.0\.1:3600\//)
+    assert.match(text, /ua=Mozilla\/5\.0 \(panel probe\)/)
+    assert.match(text, /result=self-exit/)
+
+    // Neither breadcrumb substitutes for the other: the self-exit log names the
+    // trigger, the request log names the caller.
+    const selfExit = fs.readFileSync(path.join(home, 'launcher', 'logs', 'dshim-selfexit.log'), 'utf8')
+    assert.match(selfExit, /trigger=stop:this-instance/)
   } finally {
     process.exit = savedExit
     if (savedHome === undefined) delete process.env.DSH_HOME

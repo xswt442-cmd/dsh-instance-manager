@@ -5,6 +5,10 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ## Unreleased
 
+### 新增
+
+- 新增 `dshim-requests.log`：每一个被接受的写操作（`start` / `stop` / `stop-all` / `stop-self`）都记下对端地址、准入路径（`local-browser` / `browser-lan` / `fleet-peer` / `host-probe`）以及请求自带的 `Host` / `Origin` / `Referer` / `User-Agent`、目标端口与结果。self-exit 面包屑只回答「这个进程是被要求走的」，回答不了「谁要求的」——而页面点击必然带上同源 Origin、Referer 与浏览器 UA，脚本通常什么都不带，这一行正是区分二者的依据。Cookie 与 Authorization 永远不读，也不落盘。
+
 ### 变更
 
 - 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵改为固定检查该基线和 `0.1.7-rc.1`。
