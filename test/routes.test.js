@@ -21,7 +21,10 @@ const API_PATH = '/dsh-instance-manager/api'
 const EVENTS_PATH = '/dsh-instance-manager/events'
 const LINK_PATH = '/dsh-instance-manager/link'
 
-const mount = ({ upgradeSupport = true, connection } = {}) => {
+// `config` is what the profile entry hands to apply() as the second argument
+// (0.1.7-rc.1 and later); leaving it undefined reproduces the older lines,
+// where the settings service is the only source of these values.
+const mount = ({ upgradeSupport = true, connection, config } = {}) => {
   const routes = []
   const upgrades = []
   const getCalls = []
@@ -69,7 +72,7 @@ const mount = ({ upgradeSupport = true, connection } = {}) => {
       })
     }
   }
-  plugin.apply(ctx)
+  plugin.apply(ctx, config)
   const emit = (event, ...args) => {
     for (const fn of listeners.get(event) ?? []) fn(...args)
   }
@@ -261,8 +264,8 @@ const callApi = async (query, method = 'GET') => {
 
 // Full control over the request: forge an off-loopback socket peer, set a
 // bearer, or drop the socket entirely to exercise the trust-boundary gates.
-const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {}, connection }) => {
-  const { routes, dispose } = mount({ connection })
+const callApiFull = async ({ query, method = 'GET', host = '127.0.0.1', remoteAddress, headers = {}, connection, config }) => {
+  const { routes, dispose } = mount({ connection, config })
   try {
     const route = routes.find((r) => r.path === API_PATH)
     let status = 0
@@ -555,6 +558,36 @@ test('a configured fleet token unlocks the remote mode for an off-loopback peer'
       headers: { host: '127.0.0.1:3080', authorization: 'Bearer test-fleet-token' }
     })
     assert.equal(r.status, 200, 'valid bearer over a remote peer is allowed')
+    assert.equal(r.json.ok, true)
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    if (savedToken === undefined) delete process.env.DSHIM_FLEET_TOKEN
+    else process.env.DSHIM_FLEET_TOKEN = savedToken
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('the profile entry config serves the fleet token (0.1.7-rc.1, no settings service)', async () => {
+  // 0.1.7-rc.1 dropped `settings.register`, so the only remaining source for
+  // the live section is the config cordis hands to apply(). This is the same
+  // assertion as the env-token case above, with the value coming from there
+  // and the env deliberately unset — otherwise the base layer would serve it
+  // and the test would pass without the new path working at all.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-entrycfg-'))
+  const savedHome = process.env.DSH_HOME
+  const savedToken = process.env.DSHIM_FLEET_TOKEN
+  process.env.DSH_HOME = home
+  delete process.env.DSHIM_FLEET_TOKEN
+  try {
+    const r = await callApiFull({
+      query: 'action=logs&port=3080',
+      method: 'GET',
+      remoteAddress: '203.0.113.5',
+      headers: { host: '127.0.0.1:3080', authorization: 'Bearer from-entry-config' },
+      config: { live: { fleetToken: 'from-entry-config' } }
+    })
+    assert.equal(r.status, 200, 'the entry config must reach resolveFleetToken')
     assert.equal(r.json.ok, true)
   } finally {
     if (savedHome === undefined) delete process.env.DSH_HOME

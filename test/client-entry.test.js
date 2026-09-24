@@ -229,6 +229,82 @@ test('dock placement migrates from localStorage and then follows settings snapsh
   assert.equal(storage['createhelper.utilityDock.placement'], 'hidden')
 })
 
+test('0.1.7 serves preferences through configForms, which wins over a concurrent settingsScope', () => {
+  // The service was renamed: `settingsScope.bind()` up to 0.1.5,
+  // `configForms.get(ns)` from 0.1.7-rc.1. Both are injected at runtime, so
+  // whichever exists binds — and when both are somehow present the newer one
+  // must be the only binder, or preferences would be applied twice.
+  let definition = null
+  let dockRoot = null
+  let styleElement = null
+  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const makeElement = () => ({
+    style: { setProperty() {} },
+    dataset: {},
+    attributes: {},
+    listeners: {},
+    children: [],
+    setAttribute() {},
+    addEventListener() {},
+    appendChild(value) { this.children.push(value) },
+    replaceChildren() { this.children = [] },
+    remove() {}
+  })
+  const storage = {}
+  const context = {
+    localStorage: {
+      getItem: (key) => (key in storage ? storage[key] : null),
+      setItem: (key, value) => { storage[key] = String(value) }
+    },
+    document: {
+      body: { appendChild(value) { dockRoot = value } },
+      documentElement: { dataset: {}, style: { setProperty() {} } },
+      head: { appendChild(value) { styleElement = value } },
+      createElement: makeElement,
+      querySelector: (selector) => (selector.startsWith('style[') ? styleElement : null)
+    },
+    window: {
+      addEventListener() {},
+      removeEventListener() {},
+      __ModuleLoader__: { load(value) { definition = value } }
+    }
+  }
+  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
+  const plugin = definition.factory(() => ({ createElement() {} }))
+
+  const slots = { inject(name, factory) { factory() }, register() { return () => {} } }
+  let bindCalls = 0
+  let servedNamespace = null
+  const scope = {
+    getSnapshot: () => ({
+      status: 'ready',
+      value: { dockPlacement: 'hidden', refreshIntervalMs: 8000 },
+      user: { dockPlacement: 'hidden' }
+    }),
+    subscribe() { return () => {} },
+    set() { return Promise.resolve() }
+  }
+  plugin.apply({
+    inject(names, mount) {
+      const list = Array.from(names)
+      if (list.indexOf('configForms') !== -1) {
+        mount({ configForms: { get(ns) { servedNamespace = ns; return scope } } })
+        return
+      }
+      if (list.indexOf('settingsScope') !== -1) {
+        mount({ bind() { bindCalls++; return scope } })
+        return
+      }
+      mount({ slots, on() {} })
+    },
+    on() {}
+  })
+
+  assert.equal(servedNamespace, 'dsh-instance-manager', 'the namespace is the same on both services')
+  assert.equal(bindCalls, 0, 'configForms binds first; the older service must not bind a second time')
+  assert.equal(context.document.documentElement.dataset.createhelperUtilityDockPlacement, 'hidden')
+})
+
 test('unavailable settings keep the localStorage placement instead of defaults', () => {
   let definition = null
   let styleElement = null
