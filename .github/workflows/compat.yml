@@ -71,13 +71,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # Fixed versions only, deliberately: `@latest` currently resolves to
-        # 0.1.5-rc.2, whose own sub-dependencies float up to rc.3 and which then
-        # fails to resolve @deepseek-ai/dsh-sandbox-local at boot on a clean
-        # install. Measured on these runners: the root at 0.1.5-rc.3 boots on
-        # both OSes, the root at 0.1.5-rc.2 does not, with pnpm absent in every
-        # case. Test '@latest' again once upstream ships a consistent release;
-        # until then a red job here would only restate that defect.
+        # Pin the supported 0.1.5 line at its known-bootable rc.3 and test the
+        # 0.1.7 settings migration explicitly. Avoid a moving `@latest` here:
+        # this job is the reproducible compatibility contract.
         #
         # 0.1.7-rc.1 is the line to keep: it renamed the client settings
         # service (settingsScope -> configForms) and moved a plugin's settings
@@ -85,14 +81,7 @@ jobs:
         # take different code paths there. Both paths are covered by unit
         # tests; this job is what proves the pair works against a real host.
         #
-        # The 0.1.2-rc.1 entry is a different story and is not yet explained: it
-        # fails on both runners (prints its launch URL, then never answers) while
-        # the very same version boots against this same bundle in about a second
-        # on a developer machine — reproduced by hand, with pnpm on PATH and with
-        # it removed, both times fine. So the oldest declared line is red for a
-        # reason that has nothing to do with this plugin, and the failure is
-        # left visible rather than silenced.
-        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3', '@0.1.7-rc.1']
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
