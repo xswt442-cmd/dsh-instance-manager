@@ -79,6 +79,12 @@ jobs:
         # case. Test '@latest' again once upstream ships a consistent release;
         # until then a red job here would only restate that defect.
         #
+        # 0.1.7-rc.1 is the line to keep: it renamed the client settings
+        # service (settingsScope -> configForms) and moved a plugin's settings
+        # into the profile entry's config, so the two halves of this plugin
+        # take different code paths there. Both paths are covered by unit
+        # tests; this job is what proves the pair works against a real host.
+        #
         # The 0.1.2-rc.1 entry is a different story and is not yet explained: it
         # fails on both runners (prints its launch URL, then never answers) while
         # the very same version boots against this same bundle in about a second
@@ -86,7 +92,7 @@ jobs:
         # it removed, both times fine. So the oldest declared line is red for a
         # reason that has nothing to do with this plugin, and the failure is
         # left visible rather than silenced.
-        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3']
+        dsh-spec: ['@0.1.2-rc.1', '@0.1.5-rc.3', '@0.1.7-rc.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
