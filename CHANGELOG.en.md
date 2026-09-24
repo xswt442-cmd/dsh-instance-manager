@@ -3,6 +3,17 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.10.1 - 2026-09-24
+
+### Fixed
+
+- Support DSH 0.1.7-rc.1. That release removes the client service `settingsScope` (replaced by `configForms`) and moves a plugin's settings out of the settings service namespaces and into **the profile entry's own config** (`live` and `startup` sections). On 0.1.7 preferences silently fell back to localStorage and the environment: the panel still rendered, but dock placement, refresh interval, fleet token, peer list, and port range never picked up the configured values.
+
+### Changed
+
+- Both sources are supported, newest first: the entry config wins when it carries values, otherwise the older settings-service namespaces still serve, and environment plus built-in defaults remain the last resort. Older releases are unaffected — both paths are runtime injects, so a missing service never blocks the plugin from mounting.
+- The compat matrix gained `0.1.7-rc.1`, so each line is verified against its own host.
+
 ## 0.10.0 - 2026-09-23
 
 ### Fixed
