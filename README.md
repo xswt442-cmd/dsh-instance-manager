@@ -10,9 +10,9 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下角的 Mini Utility Dock。
+DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下、侧边栏右侧的一个图标：点开是家族面板菜单（实例管理 / TreeKeeper / 窗口压舱物），菜单容器与三行都由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
 
-偏好（dock 位置、刷新间隔、Fleet token、peer 列表、托管端口段）有两个来源：DSH 0.1.7-rc.1 起由 **profile 条目自己的 config** 提供（`live` / `startup` 两个分节），更早的版本走设置服务注册的两个命名空间。两者同时存在时以**条目 config** 为准；都缺失时回落到环境变量与内置默认值，面板照常工作。
+偏好（刷新间隔、Fleet token、peer 列表、托管端口段）有两个来源：DSH 0.1.7-rc.1 起由 **profile 条目自己的 config** 提供（`live` / `startup` 两个分节），更早的版本走设置服务注册的两个命名空间。两者同时存在时以**条目 config** 为准；都缺失时回落到环境变量与内置默认值，面板照常工作。
 
 ## 功能
 
@@ -42,12 +42,11 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 ## 配置
 
-可在 DSH settings 中配置 Dock 位置、刷新间隔、Fleet token、peers 和启动端口段。对应的环境变量可作为默认值：
+可在 DSH settings 中配置刷新间隔、Fleet token、peers 和启动端口段。对应的环境变量可作为默认值：
 
 界面语言跟随 DSH Settings → General 的全局语言，不再维护插件自己的语言偏好。
 
 ```powershell
-$env:DSHIM_DOCK_PLACEMENT = 'main-bottom-left'
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'
 $env:DSHIM_PORT_RANGE = '3080-3129'
 $env:DSHIM_FLEET_TOKEN = '<long-random-secret>'
@@ -64,6 +63,7 @@ Peer 配置是单向的；需要双向可见时，两端分别配置对方。远
 - Fleet token 没有操作级权限划分。持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
 - 浏览器 API 与事件流在 DSH 0.1.0-rc.7+ 中复用 Connection 的签名 cookie，准入由 Connection 的 Host/Origin 校验与 cookie 判定，插件自带守卫此时不参与；内部实例确认与转发只走严格 loopback 探测动作。
 - SSE 仅向本机开放。
+- 每个被接受的写操作都在 `<home>/launcher/logs/dshim-requests.log` 留下一行来源记录：对端地址、准入路径、请求自带的 `Host`/`Origin`/`Referer`/`User-Agent`、目标端口与结果。它与只记触发者的 `dshim-selfexit.log` 配对——「这个进程被要求走了」和「谁要求的」是两件事。Cookie 与 Authorization 不读取、不落盘。
 
 ## 开发
 

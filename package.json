@@ -1,13 +1,13 @@
 {
   "name": "dsh-instance-manager",
   "version": "0.10.1",
-  "description": "DSH 实例管理面板：通过 Mini Utility Dock 列出本机 3080–3129 端口的全部 dsh web 实例（端口 / PID / 运行时长 / 会话数），支持优雅停止、两步确认停止当前实例、一键全部结束与新实例启动。Mini Utility Dock panel for DeepSeek Harness: list every local dsh web instance on ports 3080-3129 (port/PID/uptime/sessions) with graceful stop, Task-Manager-style stop of the current instance, stop-all, and one-click launch of a new instance.",
+  "description": "DSH 实例管理面板：从侧边栏左下的图标打开，列出本机 3080–3129 端口的全部 dsh web 实例（端口 / PID / 运行时长 / 会话数），支持优雅停止、两步确认停止当前实例、一键全部结束与新实例启动。Sidebar-launched instance panel for DeepSeek Harness: list every local dsh web instance on ports 3080-3129 (port/PID/uptime/sessions) with graceful stop, Task-Manager-style stop of the current instance, stop-all, and one-click launch of a new instance.",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "npm run dock:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
-    "dock:sync": "dsh-mini-utility-dock sync lib/client.js",
-    "dock:check": "dsh-mini-utility-dock check lib/client.js",
+    "test": "npm run launcher:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
+    "launcher:sync": "dsh-mini-utility-dock sync lib/client.js",
+    "launcher:check": "dsh-mini-utility-dock check lib/client.js",
     "loopback:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "guard:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "loopback:check": "dsh-mini-utility-dock check lib/shared.js",
@@ -15,7 +15,7 @@
     "docs:check": "dsh-plugin-docs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.3.0"
+    "dsh-mini-utility-dock": "0.5.0"
   },
   "exports": {
     ".": "./lib/index.js",

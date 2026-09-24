@@ -12,6 +12,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 ### Changed
 
 - Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and `0.1.7-rc.1`.
+- The panel launcher becomes the family's shared launcher: one 30px icon at the bottom-left of the work area (the host's `shell.overlay` layer, positioned by the sidebar's right edge + 16, 80 while the shell has not laid the column out) that opens a menu listing the three panels. The assembly comes from the new `dsh-utility-launcher` fragment in `dsh-mini-utility-dock` (maintained here with `launcher:sync` / `launcher:check`, which `npm test` runs), and this plugin only contributes its own row; the page-level dock protocol (its own container, persisted placement, icon sanitizing) is gone. The `dockPlacement` preference (and `DSHIM_DOCK_PLACEMENT`) and the old `dock:sync` / `dock:check` for `client.js` go with it.
 
 ## 0.10.1 - 2026-09-24
 

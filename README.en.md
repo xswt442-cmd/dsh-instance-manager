@@ -10,9 +10,9 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the Mini Utility Dock at the bottom-left of the page.
+Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the icon at the bottom-left of the work area, right of the sidebar: it opens a menu of the family's panels (DSH Instance / TreeKeeper / Context ballast), whose container and rows come from the `dsh-utility-launcher` fragment in `dsh-mini-utility-dock`.
 
-Preferences (dock placement, refresh interval, fleet token, peer list, managed port range) have two sources: from DSH 0.1.7-rc.1 they come from **the profile entry's own config** (`live` and `startup` sections); on earlier releases they come from the two namespaces the settings service registers. When both are present the **entry config** wins; when neither is, values fall back to environment variables and built-in defaults, and the panel keeps working.
+Preferences (refresh interval, fleet token, peer list, managed port range) have two sources: from DSH 0.1.7-rc.1 they come from **the profile entry's own config** (`live` and `startup` sections); on earlier releases they come from the two namespaces the settings service registers. When both are present the **entry config** wins; when neither is, values fall back to environment variables and built-in defaults, and the panel keeps working.
 
 ## Features
 
@@ -42,12 +42,11 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 ## Configuration
 
-DSH settings control Dock placement, refresh interval, fleet token, peers, and the launch port band. Environment variables provide defaults:
+DSH settings control the refresh interval, fleet token, peers, and the launch port band. Environment variables provide defaults:
 
 The UI language follows the global DSH Settings → General language; the plugin no longer stores a separate language preference.
 
 ```powershell
-$env:DSHIM_DOCK_PLACEMENT = 'main-bottom-left'
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'
 $env:DSHIM_PORT_RANGE = '3080-3129'
 $env:DSHIM_FLEET_TOKEN = '<long-random-secret>'
@@ -64,6 +63,7 @@ Peer configuration is directional; configure each side when both machines should
 - The fleet token has no action-level scopes. A holder can start or stop local instances and read session information, so grant it only to trusted devices.
 - On DSH 0.1.0-rc.7+, browser APIs and event streams reuse the Connection signed cookie, so admission is decided by Connection's Host/Origin fence and cookie and this plugin's own guard no longer takes part; instance confirmation and forwarding use private strict-loopback probes.
 - SSE remains local-only.
+- Every accepted mutation leaves one provenance line in `<home>/launcher/logs/dshim-requests.log`: socket peer, admission path, the request's `Host`/`Origin`/`Referer`/`User-Agent`, target port and result. It pairs with `dshim-selfexit.log`, which records only the trigger — "this process was asked to leave" without "who asked". Cookies and Authorization are never read and never written.
 
 ## Development
 

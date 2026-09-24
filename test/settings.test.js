@@ -10,7 +10,6 @@ import assert from 'node:assert/strict'
 import {
   SETTINGS_NAMESPACE,
   SETTINGS_NAMESPACE_STARTUP,
-  DOCK_PLACEMENT_FIELD,
   REFRESH_INTERVAL_FIELD,
   FLEET_TOKEN_FIELD,
   PEERS_FIELD,
@@ -79,7 +78,6 @@ test('live namespace registers dock/interval/token/peers with the env base layer
     [PEERS_FIELD]: 'a@http://10.0.0.1:3080,b@10.0.0.2:3080'
   })
   const fields = call.schema.fields
-  assert.equal(fields[DOCK_PLACEMENT_FIELD].kind, 'union')
   assert.equal(fields[REFRESH_INTERVAL_FIELD].kind, 'number')
   assert.equal(fields[FLEET_TOKEN_FIELD].roleName, 'secret',
     'the token must be declared write-only so every wire read redacts it')
@@ -118,7 +116,7 @@ test('a corrupt stored section degrades to env/defaults and never blocks load', 
   assert.equal(live.degraded, true)
   assert.equal(live.get()[FLEET_TOKEN_FIELD], 'env-token')
   assert.equal(live.get()[PEERS_FIELD], 'a@x:1')
-  assert.equal(live.get()[DOCK_PLACEMENT_FIELD], 'main-bottom-left')
+  assert.equal(live.get()[REFRESH_INTERVAL_FIELD], 4000)
 
   const startup = registerStartupSettings({
     ctx: mockSettingsHost({ fail: true }).ctx, z, env,
@@ -178,7 +176,7 @@ test('missing schemastery or settings service degrades without throwing', () => 
   assert.equal(registerLiveSettings({ z }).registered, false)
   assert.equal(registerStartupSettings({ z }).registered, false)
   // Degraded getters still answer usable sections.
-  assert.equal(registerLiveSettings({ ctx: {}, z: null }).get()[DOCK_PLACEMENT_FIELD], 'main-bottom-left')
+  assert.equal(registerLiveSettings({ ctx: {}, z: null }).get()[REFRESH_INTERVAL_FIELD], 4000)
 })
 
 test('port range resolution: user over env over default; garbage falls back at consumption', () => {

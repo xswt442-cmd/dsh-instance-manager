@@ -3,10 +3,15 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 
-test('client contributes both DIM surfaces without occupying the sidebar footer', () => {
+// The browser half owns no dock of its own any more: the launcher is one entry
+// in the host's `conversation.composer.dock` seat, and the panel plus the fleet
+// toasts stay on `shell.overlay`. Both halves of that split are asserted here,
+// because a registration that silently never happens leaves the UI with nothing
+// to click and no error anywhere.
+test('the client registers a composer-dock launcher and two overlay surfaces', () => {
   let definition = null
   let styleElement = null
-  let dockRoot = null
+  let bodyChild = null
   const registered = []
   let localeNamespace = null
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
@@ -24,7 +29,7 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   })
   const context = {
     document: {
-      body: { appendChild(value) { dockRoot = value } },
+      body: { appendChild(value) { bodyChild = value } },
       documentElement: { dataset: {}, style: { setProperty() {} } },
       head: { appendChild(value) { styleElement = value } },
       createElement: makeElement,
@@ -48,7 +53,9 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
 
   const slots = {
     inject(name, mount) {
-      assert.equal(name, 'shell.overlay')
+      // This plugin's row joins the family menu; its panel and toasts ride the
+      // frame-wide overlay layer.
+      assert.ok(name === 'createhelper.utility.item' || name === 'shell.overlay', name)
       mount()
     },
     register(options, render) {
@@ -77,7 +84,6 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
         return
       }
       if (Array.from(names).indexOf('settingsScope') !== -1) {
-        // Benign binder: an unavailable namespace keeps the localStorage value.
         mount({
           bind: () => ({
             getSnapshot: () => ({ status: 'unavailable' }),
@@ -98,135 +104,36 @@ test('client contributes both DIM surfaces without occupying the sidebar footer'
   assert.equal(localeNamespace, 'dsh-instance-manager')
   assert.doesNotMatch(source, /dshim-lang/, 'language persistence belongs to DSH locale')
 
-  assert.deepEqual(registered.map(entry => entry.options.id), [
+  assert.deepEqual(registered.map((entry) => entry.options.id), [
+    'instance-manager',
+    'utility-launcher',
     'instance-manager-panel',
     'instance-manager-fleet-toasts'
   ])
-  assert.equal(registered.every(entry => entry.options.name === 'shell.overlay'), true)
-  assert.equal(registered.every(entry => typeof entry.render === 'function'), true)
-  const dock = context.window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__
-  assert.equal(dock.protocol, 'createhelper.dsh.utility-dock')
-  assert.equal(dock.version, 1)
-  assert.equal(dockRoot.children[0].title, 'DSH Instance')
+  assert.deepEqual(registered.map((entry) => entry.options.name), [
+    'createhelper.utility.item',
+    'shell.overlay',
+    'shell.overlay',
+    'shell.overlay'
+  ])
+  // The launcher declares the menu's child seat, which is what authorizes every
+  // family member to contribute a row to it. JSON round-tripped: the options come
+  // from the vm sandbox, so their prototypes are not this realm's.
+  assert.deepEqual(JSON.parse(JSON.stringify(registered[1].options.children)), {
+    'createhelper.utility.item': { kind: 'list', scope: 'root' }
+  })
+  assert.equal(typeof registered[0].options.order, 'number',
+    'the seat orders entries; a launcher without an order lands wherever')
+  assert.equal(registered.every((entry) => typeof entry.render === 'function'), true)
   assert.equal((source.match(/appTitle: 'DSH Instance'/g) || []).length, 2,
     'both panel languages use the same product title')
 
-  dockRoot.children[0].listeners.click()
-  assert.equal(dockRoot.children[0].attributes['aria-pressed'], 'true')
-  const other = dock.register({ id: 'other-panel', label: 'other', icon: '', onActivate() {} })
-  dockRoot.children.find(child => child.title === 'other').listeners.click()
-  assert.equal(dockRoot.children.find(child => child.title === 'DSH Instance').attributes['aria-pressed'], 'false',
-    'opening another dock item deactivates the active panel')
-  other.dispose()
-
-  const first = dock.register({ id: 'reload-probe', label: 'old', icon: '', onActivate() {} })
-  const second = dock.register({ id: 'reload-probe', label: 'new', icon: '', onActivate() {} })
-  first.dispose()
-  assert.equal(dockRoot.children.some(child => child.title === 'new'), true,
-    'an obsolete registration must not remove its HMR replacement')
-  second.dispose()
-})
-
-test('dock placement migrates from localStorage and then follows settings snapshots', () => {
-  let definition = null
-  let styleElement = null
-  let dockRoot = null
-  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-  const makeElement = () => ({
-    style: { setProperty() {} },
-    dataset: {},
-    attributes: {},
-    listeners: {},
-    children: [],
-    setAttribute(name, value) { this.attributes[name] = String(value) },
-    addEventListener(name, listener) { this.listeners[name] = listener },
-    appendChild(value) { this.children.push(value) },
-    replaceChildren() { this.children = [] },
-    remove() {}
-  })
-  const storage = { 'createhelper.utilityDock.placement': 'main-bottom-right' }
-  const context = {
-    localStorage: {
-      getItem: (key) => (key in storage ? storage[key] : null),
-      setItem: (key, value) => { storage[key] = String(value) }
-    },
-    document: {
-      body: { appendChild(value) { dockRoot = value } },
-      documentElement: { dataset: {}, style: { setProperty() {} } },
-      head: { appendChild(value) { styleElement = value } },
-      createElement: makeElement,
-      querySelector(selector) {
-        return selector.startsWith('style[') ? styleElement : null
-      }
-    },
-    window: {
-      addEventListener() {},
-      removeEventListener() {},
-      __ModuleLoader__: { load(value) { definition = value } }
-    }
-  }
-  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
-  const plugin = definition.factory(() => ({ createElement() {} }))
-
-  // The dock must exist so placement changes flow through the shared
-  // protocol (localStorage mirror + geometry), exactly like production.
-  const slots = {
-    inject(name, factory) { factory() },
-    register() { return () => {} }
-  }
-  let snapshot = { status: 'loading', value: undefined, user: undefined }
-  const listeners = new Set()
-  const sets = []
-  const scope = {
-    getSnapshot: () => snapshot,
-    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) },
-    set(field, value) { sets.push([field, value]); return Promise.resolve() }
-  }
-  plugin.apply({
-    inject(names, mount) {
-      if (Array.from(names).indexOf('settingsScope') !== -1) mount({ bind: () => scope })
-      else mount({ slots, on() {} })
-    },
-    on() {}
-  })
-
-  // While loading, nothing is applied and nothing is migrated yet.
-  assert.deepEqual(sets, [])
-  const placementAttr = () => context.document.documentElement.dataset.createhelperUtilityDockPlacement
-
-  // First ready snapshot: the legacy localStorage value migrates ONCE into
-  // the user layer, and stays effective until the host commit round-trips.
-  snapshot = {
-    status: 'ready',
-    value: { dockPlacement: 'main-bottom-left', refreshIntervalMs: 4000 },
-    user: {}
-  }
-  for (const fn of Array.from(listeners)) fn()
-  assert.deepEqual(sets, [['dockPlacement', 'main-bottom-right']])
-  assert.equal(placementAttr(), 'main-bottom-right',
-    'the migrated value wins over the (default) snapshot until the commit lands')
-  assert.equal(storage['createhelper.utilityDock.placement'], 'main-bottom-right')
-
-  // Host commit: the user layer now carries the field; settings is
-  // authoritative and the pending legacy value is dropped.
-  snapshot = {
-    status: 'ready',
-    value: { dockPlacement: 'main-bottom-right', refreshIntervalMs: 4000 },
-    user: { dockPlacement: 'main-bottom-right' }
-  }
-  for (const fn of Array.from(listeners)) fn()
-  assert.deepEqual(sets, [['dockPlacement', 'main-bottom-right']], 'migration never writes twice')
-  assert.equal(placementAttr(), 'main-bottom-right')
-
-  // A settings edit repositions the dock and keeps the localStorage mirror.
-  snapshot = {
-    status: 'ready',
-    value: { dockPlacement: 'hidden', refreshIntervalMs: 8000 },
-    user: { dockPlacement: 'hidden' }
-  }
-  for (const fn of Array.from(listeners)) fn()
-  assert.equal(placementAttr(), 'hidden')
-  assert.equal(storage['createhelper.utilityDock.placement'], 'hidden')
+  // Nothing may go back to floating a container over the page: that container is
+  // what covered the composer's own controls, and the host seat replaces it.
+  assert.equal(bodyChild, null, 'the client must not append a floating container to body')
+  assert.equal(context.window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__, undefined,
+    'the retired page-local dock protocol stays out of the bundle')
+  assert.doesNotMatch(source, /getUtilityDock|CREATEHELPER_DSH_UTILITY_DOCK/)
 })
 
 test('0.1.7 serves preferences through configForms, which wins over a concurrent settingsScope', () => {
@@ -235,7 +142,6 @@ test('0.1.7 serves preferences through configForms, which wins over a concurrent
   // whichever exists binds — and when both are somehow present the newer one
   // must be the only binder, or preferences would be applied twice.
   let definition = null
-  let dockRoot = null
   let styleElement = null
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
   const makeElement = () => ({
@@ -250,14 +156,9 @@ test('0.1.7 serves preferences through configForms, which wins over a concurrent
     replaceChildren() { this.children = [] },
     remove() {}
   })
-  const storage = {}
   const context = {
-    localStorage: {
-      getItem: (key) => (key in storage ? storage[key] : null),
-      setItem: (key, value) => { storage[key] = String(value) }
-    },
     document: {
-      body: { appendChild(value) { dockRoot = value } },
+      body: { appendChild() {} },
       documentElement: { dataset: {}, style: { setProperty() {} } },
       head: { appendChild(value) { styleElement = value } },
       createElement: makeElement,
@@ -278,8 +179,8 @@ test('0.1.7 serves preferences through configForms, which wins over a concurrent
   const scope = {
     getSnapshot: () => ({
       status: 'ready',
-      value: { dockPlacement: 'hidden', refreshIntervalMs: 8000 },
-      user: { dockPlacement: 'hidden' }
+      value: { refreshIntervalMs: 8000 },
+      user: {}
     }),
     subscribe() { return () => {} },
     set() { return Promise.resolve() }
@@ -302,62 +203,4 @@ test('0.1.7 serves preferences through configForms, which wins over a concurrent
 
   assert.equal(servedNamespace, 'dsh-instance-manager', 'the namespace is the same on both services')
   assert.equal(bindCalls, 0, 'configForms binds first; the older service must not bind a second time')
-  assert.equal(context.document.documentElement.dataset.createhelperUtilityDockPlacement, 'hidden')
-})
-
-test('unavailable settings keep the localStorage placement instead of defaults', () => {
-  let definition = null
-  let styleElement = null
-  let dockRoot = null
-  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-  const makeElement = () => ({
-    style: { setProperty() {} },
-    dataset: {},
-    attributes: {},
-    listeners: {},
-    children: [],
-    setAttribute() {},
-    addEventListener() {},
-    appendChild(value) { this.children.push(value) },
-    replaceChildren() { this.children = [] },
-    remove() {}
-  })
-  const storage = { 'createhelper.utilityDock.placement': 'hidden' }
-  const context = {
-    localStorage: {
-      getItem: (key) => (key in storage ? storage[key] : null),
-      setItem: (key, value) => { storage[key] = String(value) }
-    },
-    document: {
-      body: { appendChild(value) { dockRoot = value } },
-      documentElement: { dataset: {}, style: { setProperty() {} } },
-      head: { appendChild(value) { styleElement = value } },
-      createElement: makeElement,
-      querySelector() { return null }
-    },
-    window: {
-      addEventListener() {},
-      removeEventListener() {},
-      __ModuleLoader__: { load(value) { definition = value } }
-    }
-  }
-  vm.runInNewContext(source, context, { filename: 'lib/client.js' })
-  const plugin = definition.factory(() => ({ createElement() {} }))
-  plugin.apply({
-    inject(names, mount) {
-      if (Array.from(names).indexOf('settingsScope') !== -1) {
-        mount({
-          bind: () => ({
-            getSnapshot: () => ({ status: 'unavailable' }),
-            subscribe() { return () => { } }
-          })
-        })
-        return
-      }
-      mount({ slots: { inject(name, factory) { factory() }, register() { return () => {} } }, on() {} })
-    },
-    on() {}
-  })
-  assert.equal(context.document.documentElement.dataset.createhelperUtilityDockPlacement, 'hidden',
-    'memory mode / unexposed namespace falls back to the localStorage value')
 })
