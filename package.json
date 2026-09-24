@@ -17,6 +17,14 @@
   "devDependencies": {
     "dsh-mini-utility-dock": "0.5.0"
   },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.1.5-rc.3"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
@@ -54,7 +62,8 @@
     "README.en.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.1.5-rc.3"
   },
   "license": "MIT"
 }

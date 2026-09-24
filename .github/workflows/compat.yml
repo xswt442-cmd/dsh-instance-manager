@@ -75,13 +75,13 @@ jobs:
         # 0.1.7 settings migration explicitly. Avoid a moving `@latest` here:
         # this job is the reproducible compatibility contract.
         #
-        # 0.1.7-rc.1 is the line to keep: it renamed the client settings
-        # service (settingsScope -> configForms) and moved a plugin's settings
-        # into the profile entry's config, so the two halves of this plugin
-        # take different code paths there. Both paths are covered by unit
+        # 0.1.7-rc.2 is the line to keep: the 0.1.7 line renamed the client
+        # settings service (settingsScope -> configForms) and moved a plugin's
+        # settings into the profile entry's config, so the two halves of this
+        # plugin take different code paths there. Both paths are covered by unit
         # tests; this job is what proves the pair works against a real host.
         #
-        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.1']
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5

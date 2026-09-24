@@ -11,6 +11,7 @@
 - Read optional DSH services only inside `ctx.inject(...)` callbacks.
 - Preserve the request guards in `lib/shared.js`: local routes and fleet routes have different trust boundaries.
 - Keep `README.md` / `README.en.md` and `CHANGELOG.md` / `CHANGELOG.en.md` in sync.
+- The supported DSH floor lives in three places and must agree: the README badge, `engines.dsh`, and `peerDependencies['@deepseek-ai/dsh']` (marked optional in `peerDependenciesMeta` so npm never installs the host because of it). DSH's startup preflight compares that peer against the running version with prereleases included and disables the row when it does not match, and the only override is an exact-version `dsh plugin allow-version` exemption. The range carries no upper bound on purpose: a ceiling would disable this plugin on the host's next release, and the exemption path accepts an exact version only.
 
 ## Verify
 

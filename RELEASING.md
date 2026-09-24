@@ -9,13 +9,13 @@ Releases are tag-driven. Branch pushes do not publish anything. The examples bel
    - `lib/shared.js#VERSION`
    - the first section of both changelogs: `## X.Y.Z - YYYY-MM-DD`
 2. Make sure the embedded fragments match their canonical sources in
-   `dsh-mini-utility-dock` (the dock bootstrap in `lib/client.js`, the loopback
-   predicates in `lib/shared.js`). `npm test` fails if either has drifted, and
-   `npm run guard:sync` / `npm run dock:sync` rewrites them:
+   `dsh-mini-utility-dock` (the loopback predicates and the host request guard
+   in `lib/shared.js`, the utility launcher in `lib/client.js`). `npm test`
+   fails if any has drifted, and the matching sync script rewrites them:
 
    ```sh
    npm run guard:sync
-   npm run dock:sync
+   npm run launcher:sync
    ```
 
 3. Run:

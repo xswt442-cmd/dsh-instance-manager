@@ -11,8 +11,9 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and `0.1.7-rc.1`.
+- Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and the 0.1.7 line.
 - The panel launcher becomes the family's shared launcher: one 30px icon at the bottom-left of the work area (the host's `shell.overlay` layer, positioned by the sidebar's right edge + 16, 80 while the shell has not laid the column out) that opens a menu listing the three panels. The assembly comes from the new `dsh-utility-launcher` fragment in `dsh-mini-utility-dock` (maintained here with `launcher:sync` / `launcher:check`, which `npm test` runs), and this plugin only contributes its own row; the page-level dock protocol (its own container, persisted placement, icon sanitizing) is gone. The `dockPlacement` preference (and `DSHIM_DOCK_PLACEMENT`) and the old `dock:sync` / `dock:check` for `client.js` go with it.
+- Declare host compatibility: `peerDependencies` now carries `@deepseek-ai/dsh: >=0.1.5-rc.3` (marked optional in `peerDependenciesMeta`, so npm never installs the host because of it), `engines.dsh` repeats the same range, and the compatibility matrix's 0.1.7 anchor moves from rc.1 to rc.2. The 0.1.7 startup preflight compares every `@deepseek-ai/dsh*` peer against the running version with prereleases included and **disables** the row when it does not match, with only an exact-version `dsh plugin allow-version` exemption to override it — previously this plugin declared no peer at all, so a user on an unsupported host got no signal. The range carries no upper bound on purpose: the host is a developer preview, a ceiling would disable our own plugin on its next release, and the exemption path accepts an exact version only.
 
 ## 0.10.1 - 2026-09-24
 

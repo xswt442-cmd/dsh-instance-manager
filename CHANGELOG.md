@@ -11,8 +11,9 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 变更
 
-- 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵改为固定检查该基线和 `0.1.7-rc.1`。
+- 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵改为固定检查该基线与 0.1.7 线。
 - 面板入口改为族的共享 launcher：页面左下角一个 30px 图标（宿主 `shell.overlay` 浮层，位置按「侧边栏右缘 + 16」，壳层未布局时退 80px），点开是列出三个面板的菜单。装配来自 `dsh-mini-utility-dock` 的新片段 `dsh-utility-launcher`（本仓以 `launcher:sync` / `launcher:check` 维护，并进入 `npm test`），本插件只投出自己那一行；页面级 dock 协议（自建容器、placement 持久化、图标消毒）整体退役。随之移除 `dockPlacement` 偏好（含 `DSHIM_DOCK_PLACEMENT`）与原先针对 `client.js` 的 `dock:sync` / `dock:check`。
+- 补齐对宿主的兼容性声明：`peerDependencies` 加上 `@deepseek-ai/dsh: >=0.1.5-rc.3`（在 `peerDependenciesMeta` 里标 optional，npm 不会因此去装宿主），`engines.dsh` 用同一范围，兼容矩阵的 0.1.7 锚点从 rc.1 抬到 rc.2。0.1.7 起的启动预检会拿 `peerDependencies` 里的 `@deepseek-ai/dsh*` 与运行版本（含 prerelease）比较，不满足就把该行**禁用**，只有 `dsh plugin allow-version` 的精确版本豁免能放行——此前本插件一个 peer 都没声明，用户跑在不支持的宿主上不会得到任何提示。范围只写下限、不设上限：宿主是 developer preview，写死上限会在它下次发版时把我们自己的插件禁掉，而豁免只认精确版本。
 
 ## 0.10.1 - 2026-09-24
 
