@@ -12,6 +12,8 @@
 
 Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the Mini Utility Dock at the bottom-left of the page.
 
+Preferences (dock placement, refresh interval, fleet token, peer list, managed port range) have two sources: from DSH 0.1.7-rc.1 they come from **the profile entry's own config** (`live` and `startup` sections); on earlier releases they come from the two namespaces the settings service registers. When both are present the **entry config** wins; when neither is, values fall back to environment variables and built-in defaults, and the panel keeps working.
+
 ## Features
 
 - One row per instance: port, PID, uptime, live session count, resident memory, version, and whether it is the instance hosting this panel. The current instance always sorts first; everything else follows by ascending port.
