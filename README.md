@@ -10,7 +10,7 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下、侧边栏右侧的一个图标：点开是家族面板菜单（实例管理 / TreeKeeper / 窗口压舱物），菜单容器与三行都由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
+DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下、侧边栏右侧的一个菜单图标，菜单容器与三行都由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
 
 偏好（刷新间隔、Fleet token、peer 列表、托管端口段）有两个来源：DSH 0.1.7-rc.1 起由 **profile 条目自己的 config** 提供（`live` / `startup` 两个分节），更早的版本走设置服务注册的两个命名空间。两者同时存在时以**条目 config** 为准；都缺失时回落到环境变量与内置默认值，面板照常工作。
 
