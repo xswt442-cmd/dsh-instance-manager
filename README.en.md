@@ -10,7 +10,7 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the icon at the bottom-left of the work area, right of the sidebar: it opens a menu of the family's panels (DSH Instance / TreeKeeper / Context ballast), whose container and rows come from the `dsh-utility-launcher` fragment in `dsh-mini-utility-dock`.
+Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the menu icon at the bottom-left of the work area, right of the sidebar, whose container and rows come from the `dsh-utility-launcher` fragment in `dsh-mini-utility-dock`.
 
 Preferences (refresh interval, fleet token, peer list, managed port range) have two sources: from DSH 0.1.7-rc.1 they come from **the profile entry's own config** (`live` and `startup` sections); on earlier releases they come from the two namespaces the settings service registers. When both are present the **entry config** wins; when neither is, values fall back to environment variables and built-in defaults, and the panel keeps working.
 
