@@ -87,15 +87,26 @@ const mount = ({ upgradeSupport = true, connection, config, port } = {}) => {
   }
 }
 
-const callMountedRoute = async ({ connection, path = API_PATH, query = 'action=list', method = 'GET' }) => {
-  const { routes, dispose } = mount({ connection })
-  try {
+// One mount, any number of requests. The SSE subscriber ceiling lives in the
+// mount's own closure, so a per-request mount could never reach it; this is the
+// shape that can. The fake response captures the headers `writeHead` is given,
+// because `cache-control` is exactly what these routes are judged on — a stub
+// that dropped them would let a no-store regression pass silently.
+const mountCaller = ({ connection, port } = {}) => {
+  const { routes, dispose } = mount({ connection, port })
+  const call = async ({ path = API_PATH, query = 'action=list', method = 'GET' } = {}) => {
     const route = routes.find((r) => r.path === path)
+    assert.ok(route, 'no route registered at ' + path)
     let status = 0
     let body = ''
+    const headers = {}
+    // `heads` keeps every writeHead as given, so a test can assert on each reply
+    // a handler wrote rather than only on the merged last one.
+    const heads = []
     const res = {
-      writeHead: (code) => { status = code },
-      write: () => {},
+      writeHead: (code, extra) => { status = code; heads.push({ code, headers: extra || {} }); Object.assign(headers, extra || {}) },
+      setHeader: (name, value) => { headers[name.toLowerCase()] = value },
+      write: () => true,
       end: (chunk) => { body = chunk || '' },
       on: () => {}
     }
@@ -106,7 +117,15 @@ const callMountedRoute = async ({ connection, path = API_PATH, query = 'action=l
       socket: { remoteAddress: '127.0.0.1' },
       on: () => {}
     }, res)
-    return { status, json: body ? JSON.parse(body) : null }
+    return { status, headers, heads, json: body ? JSON.parse(body) : null }
+  }
+  return { call, dispose }
+}
+
+const callMountedRoute = async (opts) => {
+  const { call, dispose } = mountCaller(opts)
+  try {
+    return await call(opts)
   } finally {
     dispose()
   }
@@ -153,6 +172,39 @@ test('RC1 Connection acceptance authorizes the SSE stream', async () => {
     query: ''
   })
   assert.equal(result.status, 200)
+  assert.equal(result.headers['content-type'], 'text/event-stream')
+  // The stream carries the live instance map, so the usual `no-cache` for
+  // event-streams would still let an intermediary hand out a stale copy.
+  assert.equal(result.headers['cache-control'], 'no-store')
+  assert.equal(result.headers.connection, 'keep-alive')
+})
+
+// The subscriber ceiling is a per-mount closure variable, so it is reachable only
+// by opening the stream repeatedly against ONE mount — hence `mountCaller`. The
+// refusal is a plain JSON reply and must carry the same `cache-control: no-store`
+// as every other answer: this body names the live stream count. The loop is
+// bounded well past the ceiling rather than matching it, so the case still says
+// something if the number changes, and it never opens a real socket.
+test('the event stream caps its subscribers and answers the refusal like any JSON reply', async () => {
+  const { call, dispose } = mountCaller()
+  try {
+    let refusal = null
+    let opened = 0
+    for (let i = 0; i < 32 && !refusal; i++) {
+      const r = await call({ path: EVENTS_PATH, query: '' })
+      if (r.status === 200) opened++
+      else refusal = r
+    }
+    assert.ok(refusal, 'the ceiling must be finite, or one page becomes a local-scan amplifier')
+    assert.ok(opened > 0, 'and it is a ceiling on subscribers, not a refusal to serve')
+    assert.equal(refusal.status, 503)
+    assert.equal(refusal.json.code, 'too_many_streams')
+    assert.equal(refusal.headers['cache-control'], 'no-store', 'the route\'s own reply policy, not a bare writeHead')
+    assert.match(String(refusal.headers['content-type']), /application\/json/,
+      'a refusal is a JSON answer, not an event stream that never ends')
+  } finally {
+    dispose()
+  }
 })
 
 test('host mounts the fleet link upgrade route (fleet queries would time out without it)', () => {
@@ -517,6 +569,167 @@ test('action=stop still requires POST before it looks at the port', async () => 
   const r = await callApi('action=stop&port=1e3', 'GET')
   assert.equal(r.status, 405)
   assert.equal(r.json.code, 'need_post')
+  // The embedded gate matches the method case-insensitively, so a lowercase
+  // `post` clears it where this plugin's own pre-fragment gate answered 405.
+  // Pinned on the mounted route because that widening is deliberate and is the
+  // gate's behavior this package ships (see the note at its binding).
+  const lowered = await callApi('action=stop&port=1e3', 'post')
+  assert.notEqual(lowered.status, 405, 'a lowercase method is not refused as a non-POST')
+  assert.equal(lowered.status, 400, 'it reached the port parser, which is the next gate')
+  assert.equal(lowered.json.code, 'no_port')
+})
+
+// The discovery sweep is supposed to meet closed ports, so a fetch that fails
+// there is silence by design — but a read the caller ASKED for is not. Both
+// kinds used to resolve to the same swallowed `null`, which made "a foreign
+// service owns our API path" and "this instance went away" indistinguishable in
+// the host log. The value callers see must stay exactly as it was; only the
+// diagnosis is added.
+test('a forwarded read tells an unparsable answer from no answer at all', async () => {
+  const http = await import('node:http')
+  const originalWarn = console.warn
+  const warnings = []
+  console.warn = (...args) => { warnings.push(args.map(String).join(' ')) }
+  let server
+  let port
+  try {
+    server = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<html>something else lives here</html>')
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    port = server.address().port
+
+    const junk = await callApi('action=sessions&port=' + port)
+    assert.equal(junk.json.ok, false, 'the answer shape is unchanged')
+    assert.equal(junk.json.code, 'sessions_unavailable')
+    assert.equal(warnings.filter((l) => /\[body\]/.test(l)).length, 1, 'exactly one line, classed as a body failure')
+    assert.match(warnings[0], /content-type=text\/html/, 'and it says who answered')
+    assert.match(warnings[0], new RegExp(':' + port + ' failed'), 'and names the port')
+
+    warnings.length = 0
+    await new Promise((resolve) => server.close(resolve))
+    const gone = await callApi('action=sessions&port=' + port)
+    assert.equal(gone.json.code, 'sessions_unavailable', 'the same answer for a different failure')
+    assert.equal(warnings.filter((l) => /\[request\]/.test(l)).length, 1, 'classed as a request failure instead')
+    assert.equal(warnings.some((l) => /\[body\]/.test(l)), false)
+  } finally {
+    console.warn = originalWarn
+    if (server && server.listening) await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+// A blind sweep is 49 closed ports out of 50: the same failures there must NOT
+// reach the log, or every panel refresh writes 50 lines.
+test('the discovery sweep stays silent about ports that do not answer', async () => {
+  const http = await import('node:http')
+  const originalWarn = console.warn
+  const warnings = []
+  console.warn = (...args) => { warnings.push(args.map(String).join(' ')) }
+  let server
+  try {
+    server = http.createServer((req, res) => { res.writeHead(404); res.end('nope') })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    // A fresh heartbeat for a port that answers something other than the API is
+    // the routine case: the instance was hard-killed and something else took the
+    // port, and discovery handles it by falling through to the raw probe. The
+    // caller of that read set no expectation, so nothing may be logged about it.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-sweep-'))
+    const savedHome = process.env.DSH_HOME
+    process.env.DSH_HOME = home
+    try {
+      const dir = path.join(home, 'run', 'instances')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, server.address().port + '.json'), JSON.stringify({
+        pid: 1, port: server.address().port, startedAt: Date.now(), ts: Date.now()
+      }))
+      const r = await callApi('action=list')
+      assert.equal(r.status, 200)
+      assert.deepEqual(warnings, [], 'a heartbeat that no longer answers is the normal case')
+    } finally {
+      if (savedHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = savedHome
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  } finally {
+    console.warn = originalWarn
+    if (server && server.listening) await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+// The POST gate is the embedded `dsh-host-http` fragment now, and this is the
+// shape this package has published since 0.4.1: the `need_post` code and the
+// rejected `action` in the body. Both are supplied as policy, so a re-sync of
+// the fragment that dropped the override would answer `{ code: 'method' }` and
+// break every caller that switches on the code or reads the action back.
+test('the 405 keeps this package\'s published body: need_post plus the action', async () => {
+  const r = await callApi('action=stop&port=3080', 'GET')
+  assert.equal(r.status, 405)
+  assert.equal(r.json.ok, false)
+  assert.equal(r.json.code, 'need_post', 'not the fragment default "method"')
+  assert.equal(r.json.action, 'stop')
+  assert.equal(r.json.error, 'stop 需要 POST 请求')
+})
+
+// The route answers carry instance ports, pids and session summaries, so
+// `cache-control: no-store` is part of the boundary rather than a header nobody
+// reads: an intermediary that cached `action=list` would keep serving a dead
+// instance's pid to the next browser that asks.
+test('every route answer forbids caching, including the rejections', async () => {
+  const { call, dispose } = mountCaller()
+  try {
+    for (const [query, method] of [
+      ['action=list', 'GET'],
+      ['action=self', 'GET'],
+      ['action=sessions', 'GET'],
+      ['action=stop&port=3080', 'GET']
+    ]) {
+      const r = await call({ query, method })
+      assert.ok(r.heads.length > 0, query + ' answered')
+      for (const h of r.heads) {
+        assert.equal(h.headers['cache-control'], 'no-store', query + ' (' + h.code + ')')
+        assert.match(String(h.headers['content-type']), /application\/json/, query + ' (' + h.code + ')')
+      }
+    }
+  } finally {
+    dispose()
+  }
+})
+
+// A 500 is the one answer whose text cannot be trusted: the message of an
+// unexpected exception quotes paths, origins, and whatever a peer put into a
+// response. The raw text belongs in the host log; the body carries a code the
+// client already localizes.
+test('an unexpected handler failure answers a fixed code, never the raw message', async () => {
+  const { routes, dispose } = mount()
+  const originalError = console.error
+  const logged = []
+  console.error = (...args) => { logged.push(args.map(String).join(' ')) }
+  try {
+    const route = routes.find((r) => r.path === API_PATH)
+    let status = 0
+    let body = ''
+    const res = {
+      writeHead: (code) => { status = code },
+      end: (chunk) => { body = chunk }
+    }
+    // An absolute-but-malformed request target is what makes `new URL(req.url)`
+    // inside the handler throw, i.e. a genuine unexpected failure.
+    await route.handler(
+      { url: 'http://[', method: 'GET', headers: { host: '127.0.0.1' }, socket: { remoteAddress: '127.0.0.1' } },
+      res
+    )
+    const json = JSON.parse(body)
+    assert.equal(status, 500)
+    assert.equal(json.ok, false)
+    assert.equal(json.code, 'internal', 'the code the client maps into its own wording')
+    assert.doesNotMatch(String(json.error), /Invalid URL|invalid url/i, 'the exception text stayed out of the body')
+    assert.equal(logged.some((line) => /Invalid URL|invalid url/i.test(line)), true,
+      'and reached the host log instead')
+  } finally {
+    console.error = originalError
+    dispose()
+  }
 })
 
 test('disposal releases the process fatal-path hooks', () => {

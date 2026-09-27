@@ -158,8 +158,8 @@ const mountPanel = ({ fetchImpl }) => {
   assert.ok(panel, 'the panel must register itself on shell.overlay')
 
   // The overlay renders nothing until the panel is opened, so the driver walks
-  // the same two steps a user does: open the family menu from its icon, then pick
-  // this plugin's row. Each render gets its own hook scope, so the panel's hooks
+  // the same two steps a user does: open the launcher menu from its icon, then
+  // pick this plugin's row. Each render gets its own hook scope, so the panel's hooks
   // cannot be overwritten by either.
   const withHooks = (fn) => {
     const previous = hooks
@@ -173,12 +173,12 @@ const mountPanel = ({ fetchImpl }) => {
     }
   }
   const launcher = registrations.find((r) => r.options.id === 'utility-launcher')
-  assert.ok(launcher, 'the family launcher must register itself on the shell overlay layer')
+  assert.ok(launcher, 'the launcher must register itself on the shell overlay layer')
   const menuIcon = withHooks(() => findButton(resolve(launcher.render())))
   assert.ok(menuIcon, 'the launcher must render a button')
   menuIcon.props.onClick()
   const item = registrations.find((r) => r.options.id === 'instance-manager')
-  assert.ok(item, 'this plugin must contribute a row to the family menu')
+  assert.ok(item, 'this plugin must contribute a row to the launcher menu')
   const menuRow = withHooks(() => findButton(resolve(item.render())))
   assert.ok(menuRow, 'the row must render a button')
   menuRow.props.onClick()
