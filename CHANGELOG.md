@@ -3,43 +3,65 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## Unreleased
+
+### 新增
+
+- 嵌入 `dsh-mini-utility-dock` 的第四个片段 `dsh-host-http`：JSON 应答、POST 门槛与浏览器准入改由它提供，并新增 `http:sync` / `http:check`。
+- README 的安全章写清两条应答口径：事件流与 JSON 应答一律带 `cache-control: no-store`，意外失败只回固定 `code`。
+
+### 修复
+
+- 事件流与每个 JSON 应答都带 `cache-control: no-store`：它们写着实例端口、PID 与会话摘要，被中间缓存留住就是一份过期的本机拓扑。
+- `action` 里未预料的异常不再把原始 message 回给页面：500 只回一个固定 `code`，异常原文进宿主日志。
+- 转发到别的实例时，「应答了但不是 JSON」与「根本没应答」分别留一行日志；调用方看到的值不变，盲扫端口段仍然不记。
+
+### 变更
+
+- `sendJson` / `requirePost` / `authorizeBrowser` 不再是 `lib/index.js` 的局部闭包，改由片段提供。对外口径不变：405 仍是 `need_post`，并回显被拒的 `action`。方法名改为大小写不敏感匹配，小写的 `post` 现在会被放行。
+- README 配置章改成可操作的：`live` / `startup` 两节、两个命名空间 id、每个字段的默认值与取值范围、环境变量所在的层级，以及 `DSHIM_FLEET_TOKEN_REF` 引用的是变量名而不是 token。
+
+### 维护
+
+- CI 现在跑 pull request，`node --check` 覆盖 `lib/` 全部文件，并在 node 20 与 24 上各跑一次；失败日志不再回显 launch token。`publish.yml` 拆成 checks / npm / release，只有 release 持写权限，标签必须落在 `main` 已包含的提交上。
+
 ## 0.10.3 - 2026-09-25
 
 ### 新增
 
-- 新增 `dshim-requests.log`：每个被接受的写操作（`start` / `stop` / `stop-all` / `stop-self`）记下对端地址、准入路径与请求自带的 `Host` / `Origin` / `Referer` / `User-Agent`、目标端口与结果。self-exit 面包屑只说明进程被要求退出，说明不了是谁要求的。Cookie 与 Authorization 不读、不落盘。
+- 新增 `dshim-requests.log`：每个被接受的写操作记下对端地址、准入路径、请求自带的 Host / Origin / Referer / User-Agent、目标端口与结果；Cookie 与 Authorization 不读、不落盘。
 
 ### 变更
 
-- 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵改为固定检查该基线与 0.1.7 线。
-- 面板入口改用 `dsh-mini-utility-dock` 的共享 launcher 片段：左下角一个图标，点开是列出三个面板的菜单；页面级 dock 协议（自建容器、placement 持久化、图标消毒）退役，`dockPlacement`（含 `DSHIM_DOCK_PLACEMENT`）与 `dock:sync` / `dock:check` 一并移除。
-- 声明对宿主的兼容性：`peerDependencies` 与 `engines.dsh` 都要求 `>=0.1.5-rc.3`，peer 标 optional 以免 npm 去装宿主。宿主启动预检不满足时会禁用本插件，此前没有声明就无从判断。
-- 修复热重载后族图标消失：launcher 归属随 `dsh-mini-utility-dock` 0.5.1 改为可释放的认领，owner 销毁即唤醒其余副本注册，不再需要刷新整页。
+- 最低支持 DSH 版本提高到 `0.1.5-rc.3`；兼容矩阵固定检查该基线与 0.1.7 线。
+- 面板入口改用 `dsh-mini-utility-dock` 的共享 launcher 片段：左下角一个图标点开菜单。页面级 dock 协议与 `dockPlacement`（含 `DSHIM_DOCK_PLACEMENT`）一并退役。
+- 声明宿主兼容性：`peerDependencies` 与 `engines.dsh` 都要求 `>=0.1.5-rc.3`，peer 标 optional 以免 npm 去装宿主；没有声明时，宿主预检无从判断该不该禁用本插件。
+- 修复热重载后共享 launcher 图标消失：同步到 `dsh-mini-utility-dock` 0.5.1，图标归属随 owner 一起释放，其余副本不必刷新整页即可重新注册。
 
 ## 0.10.1 - 2026-09-24
 
 ### 修复
 
-- 支持 DSH 0.1.7-rc.1：该版本删掉了客户端服务 `settingsScope`（改为 `configForms`），并把插件的设置从设置服务的命名空间移到了 **profile 条目自己的 config**（`live` / `startup` 两个分节）。此前在 0.1.7 上偏好会静默回落到 localStorage / 环境变量：面板照常显示，但 dock 位置、刷新间隔、Fleet token、peer 列表、端口段都读不到用户配置的值。
+- 支持 DSH 0.1.7-rc.1：该版本移除 `settingsScope` 服务，并把插件设置移到 profile 条目自己的 config（`live` / `startup` 两节）。此前 0.1.7 上偏好静默回落到 localStorage 与环境变量，配置值读不到。
 
 ### 变更
 
-- 两个来源并存，新的优先：条目 config 有值时以它为准，否则沿用旧的设置服务命名空间；两者都缺时仍是环境变量与内置默认值。旧版本不受影响——两条路径都是运行时 inject，缺哪个都不影响插件挂载。
-- compat 矩阵加上 `0.1.7-rc.1`，三条线各自在自己的宿主上验证。
+- 两个来源并存，新的优先：条目 config 有值时以它为准，否则沿用设置服务的命名空间，两者都缺时仍是环境变量与内置默认值。两条路径都是运行时注入，旧版本不受影响。
+- compat 矩阵加上 `0.1.7-rc.1`，每条线各自在自己的宿主上验证。
 
 ## 0.10.0 - 2026-09-23
 
 ### 修复
 
-- fleet 出站握手加 10 秒超时。对端收下 TCP 但不返回 101 时，连接会永远停在 CONNECTING，close 不再触发、退避循环不再重启，该 peer 从此静默失联且无任何提示。
-- 事件流订阅上限 8 个，并在 `write()` 报背压时剔除最慢的订阅者。此前每个订阅者连接都触发一次全量实例列举，同一页面可以无限打开。
-- `dshim-crash.log` 与 `dshim-selfexit.log` 封顶 1MB（超出后保留后半段）。launcher 持有的 `server-<port>.out.log` 刻意不在此列——子进程握着该文件句柄，改名会把文件在写入方背后分叉。
-- `stopForAgent` 的端口校验改用统一的 `normalizePort`，不再另有一套同义规则。
-- 解析 `ws` 模块失败时留下一行日志；此前被静默吞掉，整条 fleet 链路永久不可用且无诊断信息。
+- fleet 出站握手加 10 秒超时。对端收下 TCP 却不返回 101 时，连接会一直停在 CONNECTING，该 peer 从此静默失联。
+- 事件流订阅上限 8 个，并在 `write()` 报背压时剔除最慢的订阅者；此前每个订阅都会触发一次全量实例列举。
+- `dshim-crash.log` 与 `dshim-selfexit.log` 封顶 1MB，超出后保留较新的后半段。launcher 持有的 `server-<port>.out.log` 不在内：子进程握着句柄，改名会把文件分叉。
+- `stopForAgent` 的端口校验改用统一的 `normalizePort`。
+- 解析 `ws` 模块失败时留下一行日志；此前被静默吞掉，整条 fleet 链路失联且无诊断信息。
 
 ### 变更
 
-- README 声明的最低 DSH 版本改为 `>=0.1.2-rc.1`：此前声明的 `0.1.0-rc.5` 在 npm 上并不存在，CI 也从未覆盖过它。
+- 声明的最低 DSH 版本改为 `>=0.1.2-rc.1`；此前声明的 `0.1.0-rc.5` 在 npm 上并不存在。
 
 ## 0.9.13 - 2026-09-20
 
@@ -101,7 +123,7 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 维护
 
-- 共享片段的 CI 校验改为在本仓执行（`loopback:check` / `guard:check`），不再跨仓比对。
+- 共享片段的 CI 校验改为在本仓执行（`loopback:check` / `guard:check`）。
 - LICENSE 版权署名统一为 `xswt442-cmd`。
 
 ## 0.9.6 - 2026-09-14
@@ -152,7 +174,7 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 变更
 
-- `DSH Instance` 与 TreeKeeper 接入带版本的 Mini Utility Dock 协议。
+- 面板接入带版本的 Mini Utility Dock 协议。
 - Dock 注册支持 HMR 所有权保护；打开一个面板会关闭同级面板。
 
 ### 修复
