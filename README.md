@@ -11,9 +11,9 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-DSH Web 的实例管理器。它在本机可见的每个 dsh web 实例上给出一行状态，并负责启动、打开和停止这些实例；配置了 peer 时，同一面板也能查询其他机器上的实例。入口是页面左下、侧边栏右侧的一个菜单图标，菜单容器与三行都由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
+DSH Web 的实例管理器。它为本机可见的每个 dsh web 实例显示一行状态，并负责这些实例的启动、打开与停止；配置 peer 后，同一面板也可查询其他机器上的实例。入口是工作区左下、侧边栏右侧的菜单图标，菜单容器与菜单行由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
 
-偏好（刷新间隔、Fleet token、peer 列表、托管端口段）按需不需要重启分成 `live` / `startup` 两节，而这两节由哪一路来源提供取决于宿主版本：DSH 0.1.7-rc.1 起走 profile 条目自己的 config，更早的版本走设置服务注册的两个命名空间（配置章逐条说明）。两路都没有值时回落到环境变量与内置默认值，面板照常工作。
+偏好项（刷新间隔、Fleet token、peer 列表、托管端口段）按是否需要重启分为 `live` 与 `startup` 两节。实际读取的来源取决于宿主版本：DSH 0.1.7-rc.1 及之后读取 profile 条目自身的 `config`，更早版本读取设置服务注册的两个命名空间（见配置章）。两路来源都未提供值时使用环境变量与内置默认值，面板功能不受影响。
 
 ## 功能
 
@@ -43,18 +43,18 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 ## 配置
 
-### 两个分节：live 与 startup
+### live 与 startup 两节
 
-偏好按**是否需要重启**分成两节，两节的名字在两种来源里是一致的：
+两节按是否需要重启划分，名称在两种来源中一致：
 
-- `live` —— 刷新间隔、Fleet token、peer 列表。改了立刻生效（宿主会 watch 这一节）。
-- `startup` —— 托管端口段。`applies: 'restart'`：宿主只在构造时读一次，设置界面会把待生效的改动标成「待生效」。
+- `live` —— 刷新间隔、Fleet token、peer 列表。宿主 watch 该节，修改即时生效。
+- `startup` —— 托管端口段。`applies: 'restart'`，宿主仅在构造时读取一次；设置界面把尚未生效的修改标记为「待生效」。
 
-哪一路来源在实际读取，取决于宿主版本：
+实际读取的来源取决于宿主版本：
 
-- **DSH 0.1.7-rc.1 起**：设置服务已经没有 `register`，两节都来自 profile 条目自己的 `config`。改条目 config 会重启本插件，所以 `live` 一节照样即时生效。
-- **更早的版本**：两节来自设置服务注册的两个命名空间——`dsh-instance-manager`（`live`）与 `dsh-instance-manager-startup`（`startup`），`live` 一节的改动由 watch 热生效，写在条目 config 里的同名值不会被读到。
-- 两条来源同时可用的过渡版本上，接管读取的仍是设置服务那一路。也就是说：**一份偏好只配在你所在版本实际读取的那一处**，配错地方的值是静默失效的。
+- **DSH 0.1.7-rc.1 及之后**：设置服务不再提供 `register`，两节均来自 profile 条目自身的 `config`。修改条目 config 会重启本插件，`live` 一节的改动因此同样立即生效。
+- **更早的版本**：两节来自设置服务注册的两个命名空间 `dsh-instance-manager`（`live`）与 `dsh-instance-manager-startup`（`startup`）。`live` 一节通过 watch 生效；写入条目 config 的同名字段不会被读取。
+- 两种来源同时存在的过渡版本由设置服务接管读取。偏好项应配置在当前宿主版本实际读取的位置；配置在另一处的值不生效，也不报错。
 
 ### 字段与取值范围
 
@@ -65,13 +65,13 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 | live | `peers` | string | `''`（无 peer） | `id@origin` 逗号分隔，最多 16 条；id 为 1–32 位 `[A-Za-z0-9_-]`；origin 可省 `http(s)://`；带 userinfo 的 URL 被拒绝 |
 | startup | `portRange` | string | `'3080-3129'` | `min-max`，端口在 `1`–`65535`，跨度最多 `1024` 个端口 |
 
-`portRange` 只限定 **启动新实例可以落在哪些端口**；发现是心跳驱动的，`--port 4000` 手工启动的实例照样会出现在列表里。`peers` 是单向的：需要双向可见时两端各配一份，远程行始终只读、不参与本地 stop-all。
+`portRange` 仅约束新实例可使用的端口范围；实例发现由心跳驱动，以 `--port 4000` 手工启动的实例仍会出现在列表中。`peers` 为单向配置：需要双向可见时在两端各配置一份。远程行只读，不参与本地 stop-all。
 
-界面语言跟随 DSH Settings → General 的全局语言，不再维护插件自己的语言偏好。
+界面语言跟随 DSH Settings → General 的全局语言设置，本插件不单独存储语言偏好。
 
 ### 环境变量与覆盖优先级
 
-每个字段都有一个同名环境变量，写给没有设置服务的部署，或作为设置未填时的默认值：
+每个字段都有同名环境变量，用于没有设置服务的部署，或作为偏好项未填写时的默认值：
 
 ```powershell
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'            # live.refreshIntervalMs，仅接受十进制整数
@@ -81,32 +81,32 @@ $env:DSHIM_PORT_RANGE = '3080-3129'                # startup.portRange
 $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'   # 见下：token 的「引用名」，不是 token 本身
 ```
 
-同一个字段的取值顺序是：**已生效的那个来源（见上）→ 上表的同名环境变量 → 内置默认值**。环境变量走的是 composition 的 `base` 层，它在用户存的值之下、在 schema 默认值之上；而且只有**格式正确**的 env 值才会进入这一层——一个写错的 `DSHIM_PORT_RANGE` 不会让注册失败，会被直接忽略并按默认段启动。
+单个字段的取值顺序为：当前生效的来源（见上）→ 同名环境变量 → 内置默认值。环境变量属于 composition 的 `base` 层，位于用户已存的值之下、schema 默认值之上。仅格式正确的环境变量值参与该层：格式错误的 `DSHIM_PORT_RANGE` 不会导致注册失败，该值被忽略并使用默认端口段。
 
-### Fleet token 怎么被读到
+### Fleet token 的解析顺序
 
-`DSHIM_FLEET_TOKEN_REF` 里放的**不是 token，而是「装着 token 的那个环境变量的名字」**；未设置时这个名字就是 `DSHIM_FLEET_TOKEN`。每次远程请求按下面三条依次尝试，取到第一个非空值为止：
+`DSHIM_FLEET_TOKEN_REF` 的值是存放 token 的环境变量名，而不是 token 本身；未设置时该名称为 `DSHIM_FLEET_TOKEN`。每个远程请求按以下顺序取第一个非空值：
 
-1. `live` 分节里的 `fleetToken`（条目 config 或已存设置；`DSHIM_FLEET_TOKEN` 已经是它的 base 层）；
-2. 宿主挂了凭据服务时，按上面那个名字去凭据服务解析——这才让「环境变量里只留变量名、真值由 provider 供给」成立；
-3. 直接读那个名字的进程环境变量。
+1. `live` 节的 `fleetToken`（条目 config 或已存设置；`DSHIM_FLEET_TOKEN` 已作为其 base 层参与）；
+2. 宿主提供凭据服务时，按上述名称向凭据服务解析；环境中只保留变量名、实际值由 provider 提供即依赖这一路径；
+3. 以该名称直接读取进程环境变量。
 
-逐请求解析意味着换 token 不需要重启实例。三条都拿不到值时远程面整体关闭（fail closed），本地面板照常工作。
+按请求解析，因此更换 token 无需重启实例。三项均为空时远程功能整体关闭（fail closed），本地面板不受影响。
 
 ## 安全
 
 - 本插件自带的本地守卫拒绝跨站 Origin、非 loopback Host 和不安全的 Fetch Metadata；宿主挂载了 Connection 时由它承担这一层。
 - 写操作仅接受 POST（方法名按大小写不敏感匹配）；端口必须是 1–65535 的十进制整数。
-- 事件流与每个 JSON 应答都带 `cache-control: no-store`：这些响应体写着实例端口、PID 与会话摘要，被中间缓存留住就是一份过期的本机拓扑。意外失败的 500 只回一个固定 `code`，异常原文只进宿主日志。
-- 是否需要 Fleet Bearer 由**真实 TCP 对端地址（socket）**判定，而非仅看 Host 头：对端非回环**或** Host 非回环，二者满足其一即要求 bearer。伪造 `Host: 127.0.0.1` 无法隐藏非回环对端；对端地址缺失时直接拒绝。缺少或无法解析 token 时拒绝。
+- 事件流与所有 JSON 应答携带 `cache-control: no-store`：响应体包含实例端口、PID 与会话摘要，不应由中间缓存保存。意外失败的 500 仅返回固定 `code`，异常原文只写入宿主日志。
+- 是否需要 Fleet Bearer 由真实 TCP 对端地址（socket）与 `Host` 头共同判定：对端非回环**或** Host 非回环，任一成立即要求 bearer。伪造 `Host: 127.0.0.1` 不能隐藏非回环对端；对端地址缺失时直接拒绝。token 缺失或无法解析时拒绝。
 - Fleet token 没有操作级权限划分。持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
 - 浏览器 API 与事件流在 DSH 0.1.0-rc.7+ 中复用 Connection 的签名 cookie，准入由 Connection 的 Host/Origin 校验与 cookie 判定，插件自带守卫此时不参与；内部实例确认与转发只走严格 loopback 探测动作。
 - SSE 仅向本机开放。
-- 每个被接受的写操作都在 `<home>/launcher/logs/dshim-requests.log` 留下一行来源记录：对端地址、准入路径、请求自带的 `Host`/`Origin`/`Referer`/`User-Agent`、目标端口与结果。它与只记触发者的 `dshim-selfexit.log` 配对——「这个进程被要求走了」和「谁要求的」是两件事。Cookie 与 Authorization 不读取、不落盘。
+- 每个被接受的写操作在 `<home>/launcher/logs/dshim-requests.log` 记录一行来源信息：对端地址、准入路径、请求携带的 `Host`/`Origin`/`Referer`/`User-Agent`、目标端口与结果。`dshim-selfexit.log` 只记录触发者，两个文件分别对应请求的执行与来源。Cookie 与 Authorization 不读取、不写入。
 
 ## 开发
 
-开发验证就是下面三条命令（`npm test` 会先把四个嵌入块的一致性检查跑完）。把工作树快照部署进某台机器上正在运行的 DSH profile 属于本机的一次性做法，仓库不对那个脚本的行为作承诺，它也不是安装步骤的一部分。提交前运行：
+开发验证为下列三条命令（`npm test` 会先执行四个嵌入块的一致性检查）。`scripts/` 下的部署脚本面向单机的本地快照部署，不属于安装步骤，仓库不对其行为作出承诺。提交前运行：
 
 ```sh
 npm test

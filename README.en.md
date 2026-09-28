@@ -11,9 +11,9 @@
 [![downloads](https://img.shields.io/npm/d18m/dsh-instance-manager?label=downloads&logo=npm&color=cb3837)](https://www.npmjs.com/package/dsh-instance-manager)
 [![license](https://img.shields.io/badge/license-MIT-22c55e.svg)](./LICENSE)
 
-Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and owns starting, opening, and stopping them; with a peer configured, the same panel also queries instances on other machines. Open it from the menu icon at the bottom-left of the work area, right of the sidebar, whose container and rows come from the `dsh-utility-launcher` fragment in `dsh-mini-utility-dock`.
+Instance manager for DSH Web. It shows one status row per local dsh web instance the machine can see, and starts, opens, and stops those instances; with a peer configured, the same panel also queries instances on other machines. The entry point is the menu icon at the bottom-left of the work area, right of the sidebar; its container and menu rows come from the `dsh-utility-launcher` fragment in `dsh-mini-utility-dock`.
 
-Preferences (refresh interval, fleet token, peer list, managed port range) are split into a `live` and a `startup` section, and which source feeds them depends on the host version: from DSH 0.1.7-rc.1 it is the profile entry's own config, on earlier releases the two namespaces the settings service registers (the Configuration section walks through both). When neither carries a value, environment variables and the built-in defaults do, and the panel keeps working.
+Preferences (refresh interval, fleet token, peer list, managed port range) are split into a `live` and a `startup` section by whether a change needs a restart. Which source is read depends on the host version: from DSH 0.1.7-rc.1 it is the profile entry's own `config`; on earlier releases it is the two namespaces the settings service registers (see Configuration). When neither source provides a value, environment variables and the built-in defaults apply, and the panel is unaffected.
 
 ## Features
 
@@ -43,18 +43,18 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 
 ## Configuration
 
-### Two sections: live and startup
+### The live and startup sections
 
-Preferences are split by whether a change needs a restart, and the two section names are the same in both sources:
+The two sections are divided by whether a change needs a restart, and their names are the same in both sources:
 
-- `live` — refresh interval, fleet token, peer list. A change takes effect immediately (the host watches this section).
-- `startup` — the managed port band. `applies: 'restart'`: the host reads it once at construction, and the settings UI marks a not-yet-applied edit as pending.
+- `live` — refresh interval, fleet token, peer list. The host watches this section, so a change takes effect immediately.
+- `startup` — the managed port range. `applies: 'restart'`: the host reads it once at construction, and the settings UI marks a not-yet-applied edit as pending.
 
-Which source is actually read depends on the host version:
+Which source is read depends on the host version:
 
-- **From DSH 0.1.7-rc.1** the settings service no longer exposes `register`, so both sections come from the profile entry's own `config`. Editing the entry config restarts this plugin, which is why `live` still applies immediately.
-- **On earlier releases** the two sections are the namespaces the settings service registers: `dsh-instance-manager` (`live`) and `dsh-instance-manager-startup` (`startup`). `live` applies through its watch; the same names written into an entry config are not read at all.
-- On a transitional host that offers both, the settings-service path is the one that takes over the reads. In other words: **configure a preference in the one place your host version actually reads** — a value written to the other one goes missing silently.
+- **DSH 0.1.7-rc.1 and later**: the settings service no longer exposes `register`, so both sections come from the profile entry's own `config`. Editing the entry config restarts this plugin, which is why `live` changes still apply immediately.
+- **Earlier releases**: the two sections are the namespaces the settings service registers, `dsh-instance-manager` (`live`) and `dsh-instance-manager-startup` (`startup`). `live` applies through its watch; the same names written into an entry config are not read.
+- On a transitional host that offers both, the settings-service path takes over the reads. Configure a preference where the running host version actually reads it; a value written to the other source has no effect and reports no error.
 
 ### Fields and value ranges
 
@@ -65,13 +65,13 @@ Which source is actually read depends on the host version:
 | live | `peers` | string | `''` (no peers) | comma-separated `id@origin`, at most 16 entries; id is 1–32 characters of `[A-Za-z0-9_-]`; `http(s)://` may be omitted; a URL with userinfo is rejected |
 | startup | `portRange` | string | `'3080-3129'` | `min-max`, ports within `1`–`65535`, at most `1024` ports wide |
 
-`portRange` bounds only **where a new instance may be started**; discovery is heartbeat-driven, so an instance launched by hand with `--port 4000` still shows up in the list. `peers` is directional: configure both sides when two machines should see each other, and remote rows stay read-only and out of a local stop-all.
+`portRange` bounds only where a new instance may be started; discovery is heartbeat-driven, so an instance launched by hand with `--port 4000` still appears in the list. `peers` is directional: configure both ends when two machines should see each other. Remote rows are read-only and are not part of a local stop-all.
 
-The UI language follows the global DSH Settings → General language; the plugin no longer stores a separate language preference.
+The UI language follows the global DSH Settings → General language; the plugin stores no separate language preference.
 
 ### Environment variables and override precedence
 
-Every field has an environment variable of the same name, for a deployment without a settings service or as the default when the section leaves it out:
+Every field has an environment variable of the same name, for a deployment without a settings service or as the default when the preference is left unset:
 
 ```powershell
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'            # live.refreshIntervalMs, decimal digits only
@@ -81,32 +81,32 @@ $env:DSHIM_PORT_RANGE = '3080-3129'                # startup.portRange
 $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'   # see below: the token's REFERENCE name, not the token
 ```
 
-One field resolves in this order: **the source that is live on this host (see above) → the matching variable above → the built-in default**. The environment is the composition `base` layer: below a value the user stored, above the schema default. Only a **well-formed** environment value ever enters that layer — a mistyped `DSHIM_PORT_RANGE` does not fail the registration, it is dropped and the default band is used.
+A single field resolves in this order: the source in effect on this host (see above) → the matching variable above → the built-in default. The environment is the composition `base` layer: below a value the user stored, above the schema default. Only a well-formed environment value enters that layer — a mistyped `DSHIM_PORT_RANGE` does not fail the registration; the value is dropped and the default range is used.
 
-### How the fleet token is read
+### Fleet token resolution order
 
-`DSHIM_FLEET_TOKEN_REF` does **not hold a token: it holds the name of the environment variable that holds the token**; unset, that name is `DSHIM_FLEET_TOKEN`. Each remote request tries these three in order and takes the first non-empty result:
+The value of `DSHIM_FLEET_TOKEN_REF` is the name of the environment variable holding the token, not the token itself; when unset, that name is `DSHIM_FLEET_TOKEN`. Each remote request takes the first non-empty result of:
 
-1. the `fleetToken` of the `live` section (entry config or stored settings — `DSHIM_FLEET_TOKEN` is already its base layer);
-2. the credentials service, for that name, when the host mounts one — which is what makes "keep only the variable name in the environment, let a provider own the value" work;
-3. the plain process environment under that name.
+1. the `fleetToken` of the `live` section (entry config or stored settings; `DSHIM_FLEET_TOKEN` already participates as its base layer);
+2. the credentials service, looked up under that name, when the host provides one — keeping only a variable name in the environment and letting a provider own the value depends on this path;
+3. the process environment under that name.
 
-Resolving per request means rotating the token needs no restart. When all three come up empty the whole remote surface fails closed and the local panel keeps working.
+Resolution happens per request, so rotating the token needs no restart. When all three are empty the remote surface is closed entirely (fail closed) and the local panel is unaffected.
 
 ## Security
 
 - This plugin's own local guard rejects cross-site origins, non-loopback hosts, and unsafe Fetch Metadata; a host that mounts Connection carries that layer instead.
 - Mutating actions are POST-only (the method name is matched case-insensitively); ports must be decimal integers from 1 to 65535.
-- The event stream and every JSON reply carry `cache-control: no-store`: those bodies name instance ports, pids and session summaries, and an intermediary that keeps one is a stale map of this machine. An unexpected failure answers a fixed `code` only — the exception text goes to the host log, never to the response.
-- Whether a fleet bearer is required is decided by the **real TCP peer address (socket), not just the Host header**: an off-loopback peer OR an off-loopback Host triggers the bearer. A forged `Host: 127.0.0.1` cannot hide an off-loopback peer, and a missing peer address is rejected outright. Requests fail closed when the token is missing or unresolved.
+- The event stream and every JSON reply carry `cache-control: no-store`: the bodies name instance ports, pids and session summaries and must not be held by an intermediary cache. An unexpected failure answers a fixed `code` only; the exception text goes to the host log and not into the response.
+- Whether a fleet bearer is required is decided by the real TCP peer address (socket) together with the `Host` header: an off-loopback peer OR an off-loopback Host triggers the bearer. A forged `Host: 127.0.0.1` cannot hide an off-loopback peer, and a missing peer address is rejected. Requests are refused when the token is missing or cannot be resolved.
 - The fleet token has no action-level scopes. A holder can start or stop local instances and read session information, so grant it only to trusted devices.
-- On DSH 0.1.0-rc.7+, browser APIs and event streams reuse the Connection signed cookie, so admission is decided by Connection's Host/Origin fence and cookie and this plugin's own guard no longer takes part; instance confirmation and forwarding use private strict-loopback probes.
-- SSE remains local-only.
-- Every accepted mutation leaves one provenance line in `<home>/launcher/logs/dshim-requests.log`: socket peer, admission path, the request's `Host`/`Origin`/`Referer`/`User-Agent`, target port and result. It pairs with `dshim-selfexit.log`, which records only the trigger — "this process was asked to leave" without "who asked". Cookies and Authorization are never read and never written.
+- On DSH 0.1.0-rc.7+, browser APIs and event streams reuse the Connection signed cookie, so admission is decided by Connection's Host/Origin check and cookie, and this plugin's own guard does not take part; instance confirmation and forwarding use strict loopback probe actions only.
+- SSE is local-only.
+- Every accepted mutation writes one provenance line to `<home>/launcher/logs/dshim-requests.log`: peer address, admission path, the request's `Host`/`Origin`/`Referer`/`User-Agent`, target port and result. `dshim-selfexit.log` records only the trigger; the two files cover the execution of a request and its origin separately. Cookies and Authorization are never read and never written.
 
 ## Development
 
-Development is the three commands below (`npm test` runs the four embedded-block checks first). Deploying this working tree as a snapshot into a DSH profile running on one particular machine is a local convenience: the repository makes no promise about that script, and it is not part of installing the plugin. Before committing:
+Development verification is the three commands below (`npm test` runs the four embedded-block checks first). The scripts under `scripts/` deploy a working-tree snapshot to a DSH profile on a single machine; they are not part of installing the plugin, and the repository makes no promise about their behaviour. Run before committing:
 
 ```sh
 npm test
