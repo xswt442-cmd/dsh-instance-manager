@@ -3,6 +3,16 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.10.5 - 2026-09-29
+
+### Changed
+
+- `CHANGELOG.md`, `CHANGELOG.en.md` and `RELEASING.md` move into `docs/`; the repository root keeps the two READMEs, `LICENSE`, `AGENTS.md` and `CLAUDE.md`. The npm package ships both changelogs at their new paths.
+
+### Maintenance
+
+- The `dsh-mini-utility-dock` dependency moves to 0.7.0, and `docs:check` compares the pairs this repository declares in `docs.config.mjs`.
+
 ## 0.10.4 - 2026-09-28
 
 ### Added

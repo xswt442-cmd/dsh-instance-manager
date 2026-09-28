@@ -10,7 +10,7 @@ const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const heading = new RegExp(`^## (?:\\[${escaped}\\]|${escaped}(?:\\s|$))`)
 let active = false
 const lines = []
-for (const line of fs.readFileSync('CHANGELOG.md', 'utf8').split(/\r?\n/)) {
+for (const line of fs.readFileSync('docs/CHANGELOG.md', 'utf8').split(/\r?\n/)) {
   if (line.startsWith('## ')) {
     if (active) break
     active = heading.test(line)

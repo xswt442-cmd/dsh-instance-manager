@@ -3,6 +3,16 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.10.5 - 2026-09-29
+
+### 变更
+
+- `CHANGELOG.md`、`CHANGELOG.en.md`、`RELEASING.md` 移入 `docs/`，仓库根目录保留两份 README、`LICENSE`、`AGENTS.md` 与 `CLAUDE.md`；npm 包内的两份 CHANGELOG 按新路径发布。
+
+### 维护
+
+- `dsh-mini-utility-dock` 依赖升至 0.7.0；`docs:check` 改为读取本仓声明的 `docs.config.mjs`。
+
 ## 0.10.4 - 2026-09-28
 
 ### 新增
