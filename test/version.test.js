@@ -1,9 +1,9 @@
 // Version bookkeeping.
 //
 // Three places carry the version and they are only useful in lockstep:
-//   - package.json      what npm publishes
-//   - lib/shared.js     what the running panel reports
-//   - CHANGELOG.md      what publish.yml cuts the release notes from
+//   - package.json       what npm publishes
+//   - lib/shared.js      what the running panel reports
+//   - docs/CHANGELOG.md  what publish.yml cuts the release notes from
 // A drift between the first two fails CI at the tag; a drift in the third
 // does not fail anything, it just silently ships notes that say
 // "Release x.y.z" and nothing else. This test makes all three loud.
@@ -24,7 +24,7 @@ test('both CHANGELOGs contain the version being shipped', () => {
   // matches PKG_VERSION, so an `## Unreleased` section above it is harmless.
   // What actually breaks releases is no matching section at all -> empty notes.
   const heading = new RegExp(`^## ${VERSION.replace(/\./g, '\\.')}(\\s|$)`)
-  for (const file of ['../CHANGELOG.md', '../CHANGELOG.en.md']) {
+  for (const file of ['../docs/CHANGELOG.md', '../docs/CHANGELOG.en.md']) {
     const sections = read(file).split('\n').filter((line) => line.startsWith('## '))
     assert.ok(
       sections.some((line) => heading.test(line)),

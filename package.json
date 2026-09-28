@@ -14,10 +14,10 @@
     "loopback:check": "dsh-mini-utility-dock check lib/shared.js",
     "guard:check": "dsh-mini-utility-dock check lib/shared.js",
     "http:check": "dsh-mini-utility-dock check lib/shared.js",
-    "docs:check": "dsh-plugin-docs"
+    "docs:check": "dsh-plugin-docs --config docs.config.mjs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.6.0"
+    "dsh-mini-utility-dock": "0.7.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": ">=0.1.5-rc.3"
@@ -63,8 +63,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "CHANGELOG.md",
-    "CHANGELOG.en.md",
+    "docs/CHANGELOG.md",
+    "docs/CHANGELOG.en.md",
     "LICENSE"
   ],
   "engines": {
