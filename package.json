@@ -17,7 +17,7 @@
     "docs:check": "dsh-plugin-docs"
   },
   "devDependencies": {
-    "dsh-mini-utility-dock": "0.5.1"
+    "dsh-mini-utility-dock": "0.6.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": ">=0.1.5-rc.3"
