@@ -7,25 +7,25 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 ### 新增
 
-- 嵌入 `dsh-mini-utility-dock` 的第四个片段 `dsh-host-http`：JSON 应答、POST 门槛与浏览器准入改由它提供，并新增 `http:sync` / `http:check`。
-- README 的安全章写清两条应答口径：事件流与 JSON 应答一律带 `cache-control: no-store`，意外失败只回固定 `code`。
+- 嵌入 `dsh-mini-utility-dock` 的第四个片段 `dsh-host-http`，JSON 应答、POST 方法门槛与浏览器准入由其提供；新增 `http:sync` / `http:check`。
+- README 安全章列出两条应答规则：事件流与 JSON 应答均带 `cache-control: no-store`，意外失败只返回固定 `code`。
 
 ### 修复
 
-- 事件流与每个 JSON 应答都带 `cache-control: no-store`：它们写着实例端口、PID 与会话摘要，被中间缓存留住就是一份过期的本机拓扑。
-- `action` 里未预料的异常不再把原始 message 回给页面：500 只回一个固定 `code`，异常原文进宿主日志。
-- 转发到别的实例时，「应答了但不是 JSON」与「根本没应答」分别留一行日志；调用方看到的值不变，盲扫端口段仍然不记。
+- 事件流与 JSON 应答增加 `cache-control: no-store`；这些响应体包含实例端口、PID 与会话摘要，不可由中间缓存保存。
+- `action` 中的未预期异常不再返回原始 message：500 只返回固定 `code`，异常文本写入宿主日志。
+- 跨实例转发对两类失败各记一行日志：应答不是 JSON、无应答。返回值不变；端口段扫描产生的失败不记日志。
 
 ### 变更
 
-- `sendJson` / `requirePost` / `authorizeBrowser` 不再是 `lib/index.js` 的局部闭包，改由片段提供。对外口径不变：405 仍是 `need_post`，并回显被拒的 `action`。方法名改为大小写不敏感匹配，小写的 `post` 现在会被放行。
-- README 配置章改成可操作的：`live` / `startup` 两节、两个命名空间 id、每个字段的默认值与取值范围、环境变量所在的层级，以及 `DSHIM_FLEET_TOKEN_REF` 引用的是变量名而不是 token。
+- `sendJson` / `requirePost` / `authorizeBrowser` 由片段提供，不再是 `lib/index.js` 的局部闭包。对外行为不变：405 仍返回 `need_post` 并回显被拒的 `action`；方法名按大小写不敏感匹配。
+- README 配置章补齐取值信息：`live` / `startup` 两节、两个命名空间 id、各字段的默认值与范围、环境变量所在的层级，以及 `DSHIM_FLEET_TOKEN_REF` 存放的是变量名而非 token。
 
 ### 维护
 
-- CI 现在跑 pull request，`node --check` 覆盖 `lib/` 全部文件，并在 node 20 与 24 上各跑一次；失败日志不再回显 launch token。`publish.yml` 拆成 checks / npm / release，只有 release 持写权限，标签必须落在 `main` 已包含的提交上。
+- CI 增加 pull request 触发，`node --check` 覆盖 `lib/` 全部文件，并在 node 20 与 24 各运行一次；失败日志过滤 launch token。`publish.yml` 拆为 checks / npm / release 三个 job，仅 release 持有写权限，tag 必须是 `main` 已包含的提交。
+- `dsh-mini-utility-dock` pin 升至 0.6.0，四个嵌入块重新 sync；`http:check` 覆盖第四个块。
 
-- dock pin 抬到 0.6.0，四个嵌入块重新 sync（片段注释文本随之更新）；`http:check` 自此真的比对第四块。
 ## 0.10.3 - 2026-09-25
 
 ### 新增

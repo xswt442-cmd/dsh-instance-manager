@@ -7,25 +7,25 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Added
 
-- Embedded `dsh-mini-utility-dock`'s fourth fragment, `dsh-host-http`, in `lib/shared.js`: the JSON reply, the POST gate and the browser authorizer now come from it, with `http:sync` / `http:check`.
-- The README Security chapter states both reply policies: the event stream and every JSON reply carry `cache-control: no-store`, and an unexpected failure answers a fixed `code`.
+- `dsh-mini-utility-dock`'s fourth fragment, `dsh-host-http`, is embedded in `lib/shared.js` and provides the JSON reply, the POST method gate and the browser authorizer, with `http:sync` / `http:check`.
+- The README Security chapter lists both reply rules: the event stream and every JSON reply carry `cache-control: no-store`, and an unexpected failure returns a fixed `code`.
 
 ### Fixed
 
-- The event stream and every JSON reply now carry `cache-control: no-store`. These bodies name instance ports, pids and session summaries, so an intermediary that keeps one serves a stale map of this machine.
-- An unexpected failure inside an action no longer hands its raw message to the page: a 500 answers a fixed `code`, and the exception text goes to the host log.
-- A forward to another instance now logs "answered, but not JSON" separately from "nothing answered". The values callers see are unchanged, and a blind port sweep stays silent.
+- The event stream and every JSON reply carry `cache-control: no-store`. These bodies contain instance ports, pids and session summaries, and are not stored by an intermediary cache.
+- An unexpected failure inside an action returns a fixed `code` on a 500; the exception text goes to the host log.
+- A forward to another instance logs one line per failure kind: an unparsable reply body, or a request that was refused, timed out, or died mid-stream. The values callers see are unchanged, and a discovery port sweep logs nothing.
 
 ### Changed
 
-- `sendJson`, `requirePost` and `authorizeBrowser` now come from the fragment instead of private closures in `lib/index.js`. The published vocabulary is unchanged: a 405 still answers `code: 'need_post'` and echoes the rejected `action`. The method is now matched case-insensitively, so a lowercase `post` passes.
-- The README Configuration chapter now names the `live` / `startup` sections, both namespace ids, each field's default and range, where environment variables sit in the layering, and that `DSHIM_FLEET_TOKEN_REF` holds a variable name rather than a token.
+- `sendJson`, `requirePost` and `authorizeBrowser` come from the fragment instead of private closures in `lib/index.js`. The published behaviour is unchanged: a 405 returns `code: 'need_post'` and echoes the rejected `action`; the method is matched case-insensitively.
+- The README Configuration chapter lists the `live` / `startup` sections, both namespace ids, each field's default and range, the layer environment variables occupy, and that `DSHIM_FLEET_TOKEN_REF` holds a variable name rather than a token.
 
 ### Maintenance
 
-- CI runs on pull requests, checks all of `lib/`, and covers node 20 and 24; a failed boot log no longer echoes the launch token. `publish.yml` splits into checks / npm / release, only the release job can write, and a tag must sit on `main`.
+- CI runs on pull requests, checks all of `lib/`, and covers node 20 and 24; a failed boot log filters out the launch token. `publish.yml` splits into checks / npm / release jobs, only the release job can write, and a tag must be a commit `main` already carries.
+- The dock pin is 0.6.0 and all four embedded blocks re-synced; `http:check` covers the fourth block.
 
-- The dock pin rises to 0.6.0 and all four embedded blocks re-sync (the fragments' comment text changed with it), so `http:check` compares the fourth block for real.
 ## 0.10.3 - 2026-09-25
 
 ### Added
