@@ -1,6 +1,11 @@
 name: compat
 
 on:
+  # The gate has to run where a change can still be acted on. With only push and
+  # schedule here, the first signal a branch sent was the merge commit turning
+  # `main` red, and a pull request could land having never been tested at all —
+  # the docs job was the only check a PR saw.
+  pull_request:
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
@@ -18,19 +23,36 @@ permissions:
 
 jobs:
   static:
-    name: static checks
+    name: static checks (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor `engines.node` promises, and a promise no job runs is a
+        # promise that quietly stops being true. 24 is the line this plugin is
+        # developed and released against.
+        node: [20, 24]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
+      # This repository tracks no lockfile on purpose (.gitignore: pinning
+      # devDependency tarballs says nothing about a published library whose runtime
+      # is plain Node ESM with zero dependencies). `npm ci` and setup-node's
+      # `cache: npm` both take their input from a lockfile, so neither is available
+      # here; `--ignore-scripts` is what keeps a registry-side install hook out of
+      # this job.
       - name: install development dependencies
-        run: npm install --ignore-scripts
-      - name: client.js syntax
-        run: node --check lib/client.js
-      - name: index.js syntax
-        run: node --check lib/index.js
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: syntax check every module
+        # `files` ships every module in lib/, so the syntax gate covers all of them.
+        # Naming index.js and client.js left lib/fleet.js and lib/agent-tools.js —
+        # the two that carry the peer link and the tool schemas — unchecked on a
+        # push, and a broken one is a plugin that never mounts.
+        run: |
+          set -e
+          for f in lib/*.js; do node --check "$f"; done
       - name: host module imports and exports a plugin
         run: |
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') { console.error('missing default plugin'); process.exit(1) } })"
@@ -54,11 +76,14 @@ jobs:
           # a rule inside the launcher fragment, so there is no placement literal to
           # mirror across lib/shared.js and lib/client.js any more.
 
-  # The two shared host fragments are verified locally by `npm test`, which runs
-  # loopback:check / guard:check against the pinned dock version. A cross-repo
-  # comparison is not run here: its property cannot hold while a peer checkout
-  # resolves to a different branch. `dsh-plugin-parity` (from the dock) stays available as a
-  # manual diagnostic for when every checkout shares a branch.
+  # The three shared host fragments are verified by `npm test`, whose http:check /
+  # loopback:check / guard:check compare each marked block against the pinned dock
+  # version. A check only sees the markers that version knows, so a block newer
+  # than the pin passes silently and the marker pair asserted by
+  # test/host-http.test.js is what proves it is embedded at all.
+  # A cross-repo comparison is not run here: its property cannot hold while a peer
+  # checkout resolves to a different branch. `dsh-plugin-parity` (from the dock)
+  # stays available as a manual diagnostic for when every checkout shares a branch.
   boot-check:
     name: boot dsh web with bundle (${{ matrix.os }}, dsh${{ matrix.dsh-spec }})
     strategy:
@@ -146,6 +171,18 @@ jobs:
           if (-not (Test-Path $dshBin)) { Write-Error "dsh bin not found at $dshBin" }
           $launchOut = Join-Path $env:RUNNER_TEMP 'dsh-launch.out.log'
           $launchErr = Join-Path $env:RUNNER_TEMP 'dsh-launch.err.log'
+          # The host announces its launch token on that stdout, and the token is a
+          # credential for the runner's web server for as long as the process
+          # lives. Echoing the raw log on the failure path would publish it into the
+          # workflow transcript, which is retained and readable far more widely than
+          # the job that produced it. Redact those lines; the auth loop below still
+          # reads the token out of the file directly and never echoes it.
+          function Show-DshLog([string]$path) {
+            if (-not (Test-Path $path)) { Write-Host "<no log at $path>"; return }
+            ((Get-Content $path -ErrorAction SilentlyContinue) | ForEach-Object {
+              if ($_ -match '[?&]token=' -or $_ -match '(?i)launch[\s_-]?token') { '<line redacted: carried a launch token>' } else { $_ }
+            }) -join "`n"
+          }
           $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList "`"$dshBin`"", "--profile", "web", "--no-open", "--port", "3129" -RedirectStandardOutput $launchOut -RedirectStandardError $launchErr -WindowStyle Hidden -PassThru
           $ready = $false
           for ($i = 0; $i -lt 60; $i++) {
@@ -154,8 +191,8 @@ jobs:
             if ($p.HasExited) { break }
           }
           if (-not $ready) {
-            Get-Content $launchOut -ErrorAction SilentlyContinue
-            Get-Content $launchErr -ErrorAction SilentlyContinue
+            Show-DshLog $launchOut
+            Show-DshLog $launchErr
             Write-Host '--- profile projection: is the entry there? ---'
             Get-ChildItem "$env:DSH_HOME\profiles\node_modules\@deepseek-ai" -ErrorAction SilentlyContinue |
               Select-Object -First 30 Name, LinkType, Target | Format-Table -AutoSize | Out-String | Write-Host
@@ -257,6 +294,16 @@ jobs:
           launch_log="$RUNNER_TEMP/dsh-launch.log"
           node "$dshBin" --profile web --no-open --port 3129 >"$launch_log" 2>&1 &
           pid=$!
+          # The host announces its launch token on that log, and the token is a
+          # credential for the runner's web server for as long as the process
+          # lives. A raw `cat` on the failure path would publish it into the
+          # workflow transcript, which is retained and readable far more widely
+          # than the job that produced it. Drop the lines that carry one; the
+          # token is still read out of the file below and used, never echoed.
+          show_log() {
+            [ -f "$1" ] || { echo "<no log at $1>"; return; }
+            grep -viE '[?&]token=|launch[ _-]?token' "$1" || true
+          }
           cookie_args=()
           code() { curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "${cookie_args[@]}" "$@"; }
           ready=0
@@ -267,7 +314,7 @@ jobs:
           done
           if [ "$ready" != "1" ]; then
             echo "::error::dsh web did not become ready"
-            cat "$launch_log" || true
+            show_log "$launch_log" || true
             echo '--- profile projection: is the entry there? ---'
             ls -l "$DSH_HOME/profiles/node_modules/@deepseek-ai" 2>/dev/null | head -30 || true
             echo '--- global install: is the package reachable at all? ---'
@@ -288,7 +335,7 @@ jobs:
             [ "$shell_code" = 200 ] && { shell_ready=1; break; }
             sleep 1
           done
-          [ "$shell_ready" = 1 ] || { echo "::error::failed to authenticate web shell: HTTP $shell_code"; cat "$launch_log"; kill "$pid" 2>/dev/null || true; exit 1; }
+          [ "$shell_ready" = 1 ] || { echo "::error::failed to authenticate web shell: HTTP $shell_code"; show_log "$launch_log"; kill "$pid" 2>/dev/null || true; exit 1; }
           cookie_args=(-b "$cookie_jar")
           curl -s --noproxy '*' "${cookie_args[@]}" "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
             || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }

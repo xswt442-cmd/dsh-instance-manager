@@ -5,13 +5,15 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "test": "npm run launcher:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
+    "test": "npm run http:check && npm run launcher:check && npm run guard:check && npm run loopback:check && node --test test/*.test.js",
     "launcher:sync": "dsh-mini-utility-dock sync lib/client.js",
     "launcher:check": "dsh-mini-utility-dock check lib/client.js",
     "loopback:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "guard:sync": "dsh-mini-utility-dock sync lib/shared.js",
+    "http:sync": "dsh-mini-utility-dock sync lib/shared.js",
     "loopback:check": "dsh-mini-utility-dock check lib/shared.js",
     "guard:check": "dsh-mini-utility-dock check lib/shared.js",
+    "http:check": "dsh-mini-utility-dock check lib/shared.js",
     "docs:check": "dsh-plugin-docs"
   },
   "devDependencies": {
@@ -39,6 +41,7 @@
       "platform": "web"
     }
   },
+  "author": "xswt442-cmd",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xswt442-cmd/dsh-instance-manager.git"
@@ -59,7 +62,10 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "CHANGELOG.md",
+    "CHANGELOG.en.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20",

@@ -3,43 +3,65 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### Added
+
+- Embedded `dsh-mini-utility-dock`'s fourth fragment, `dsh-host-http`, in `lib/shared.js`: the JSON reply, the POST gate and the browser authorizer now come from it, with `http:sync` / `http:check`.
+- The README Security chapter states both reply policies: the event stream and every JSON reply carry `cache-control: no-store`, and an unexpected failure answers a fixed `code`.
+
+### Fixed
+
+- The event stream and every JSON reply now carry `cache-control: no-store`. These bodies name instance ports, pids and session summaries, so an intermediary that keeps one serves a stale map of this machine.
+- An unexpected failure inside an action no longer hands its raw message to the page: a 500 answers a fixed `code`, and the exception text goes to the host log.
+- A forward to another instance now logs "answered, but not JSON" separately from "nothing answered". The values callers see are unchanged, and a blind port sweep stays silent.
+
+### Changed
+
+- `sendJson`, `requirePost` and `authorizeBrowser` now come from the fragment instead of private closures in `lib/index.js`. The published vocabulary is unchanged: a 405 still answers `code: 'need_post'` and echoes the rejected `action`. The method is now matched case-insensitively, so a lowercase `post` passes.
+- The README Configuration chapter now names the `live` / `startup` sections, both namespace ids, each field's default and range, where environment variables sit in the layering, and that `DSHIM_FLEET_TOKEN_REF` holds a variable name rather than a token.
+
+### Maintenance
+
+- CI runs on pull requests, checks all of `lib/`, and covers node 20 and 24; a failed boot log no longer echoes the launch token. `publish.yml` splits into checks / npm / release, only the release job can write, and a tag must sit on `main`.
+
 ## 0.10.3 - 2026-09-25
 
 ### Added
 
-- New `dshim-requests.log`: every accepted mutation (`start` / `stop` / `stop-all` / `stop-self`) records the socket peer, the admission path, the request's own `Host` / `Origin` / `Referer` / `User-Agent`, the target port and the result. The self-exit breadcrumb says a process was asked to leave, never who asked. Cookies and Authorization are never read or written.
+- New `dshim-requests.log`: every accepted mutation records the socket peer, the admission path, the request's `Host` / `Origin` / `Referer` / `User-Agent`, the target port and the result. Cookies and Authorization are never read or written.
 
 ### Changed
 
 - Raise the minimum supported DSH version to `0.1.5-rc.3`; the compatibility matrix now pins this baseline and the 0.1.7 line.
-- The panel entry becomes `dsh-mini-utility-dock`'s shared launcher fragment: one icon at the bottom-left opens a menu of the three panels. The page-local dock protocol (its own container, persisted placement, icon sanitizing) is retired, taking `dockPlacement` (and `DSHIM_DOCK_PLACEMENT`) and `dock:sync` / `dock:check` with it.
-- Declare host compatibility: `peerDependencies` and `engines.dsh` both require `>=0.1.5-rc.3`, with the peer marked optional so npm never installs the host. The host's startup preflight disables a plugin whose peer does not match; declaring none left it with nothing to judge.
-- Fix the family launcher disappearing after a hot reload: synced from `dsh-mini-utility-dock` 0.5.1, whose claim is released with its owner so the other copies register again without a full page reload.
+- The panel entry becomes `dsh-mini-utility-dock`'s shared launcher fragment: one icon at the bottom-left opens the menu. The page-local dock protocol and `dockPlacement` (with `DSHIM_DOCK_PLACEMENT`) are retired.
+- Declare host compatibility: `peerDependencies` and `engines.dsh` both require `>=0.1.5-rc.3`, with the peer marked optional so npm never installs the host. Without a declaration the host's startup preflight had nothing to judge.
+- Fix the shared launcher icon disappearing after a hot reload: synced from `dsh-mini-utility-dock` 0.5.1, whose claim is released with its owner, so the other copies register again without a full page reload.
 
 ## 0.10.1 - 2026-09-24
 
 ### Fixed
 
-- Support DSH 0.1.7-rc.1. That release removes the client service `settingsScope` (replaced by `configForms`) and moves a plugin's settings out of the settings service namespaces and into **the profile entry's own config** (`live` and `startup` sections). On 0.1.7 preferences silently fell back to localStorage and the environment: the panel still rendered, but dock placement, refresh interval, fleet token, peer list, and port range never picked up the configured values.
+- Support DSH 0.1.7-rc.1, which removes `settingsScope` and moves plugin settings into the profile entry's own config (`live` / `startup`). On 0.1.7 preferences had silently fallen back to localStorage and the environment, so configured values went unread.
 
 ### Changed
 
-- Both sources are supported, newest first: the entry config wins when it carries values, otherwise the older settings-service namespaces still serve, and environment plus built-in defaults remain the last resort. Older releases are unaffected — both paths are runtime injects, so a missing service never blocks the plugin from mounting.
+- Both sources stay supported, newest first: the entry config wins when it carries values, otherwise the settings-service namespaces serve, with environment and defaults last. Both paths are runtime injects, so older releases are unaffected.
 - The compat matrix gained `0.1.7-rc.1`, so each line is verified against its own host.
 
 ## 0.10.0 - 2026-09-23
 
 ### Fixed
 
-- Bound the outbound fleet handshake at 10s. A peer that accepts TCP but never returns 101 left the socket in CONNECTING forever: close never fires, the backoff loop never restarts, and the peer reads as permanently unreachable with no trace.
-- Cap the events stream at 8 subscribers and drop the slowest writer when `write()` reports backpressure. Every subscriber used to trigger a full instance listing on connect, and one page could open unlimited streams.
-- Size-cap `dshim-crash.log` and `dshim-selfexit.log` at 1MB, keeping the newest half. The launcher-owned `server-<port>.out.log` is deliberately excluded: the child holds that fd, so a rename would fork the file behind the writer's back.
-- `stopForAgent` validates ports through the shared `normalizePort` instead of a private reimplementation of the same rule.
+- Bound the outbound fleet handshake at 10s. A peer that accepts TCP but never returns 101 left the socket in CONNECTING forever, so it read as permanently unreachable with no trace.
+- Cap the events stream at 8 subscribers and drop the slowest writer when `write()` reports backpressure. Every subscriber used to trigger a full instance listing on connect.
+- Size-cap `dshim-crash.log` and `dshim-selfexit.log` at 1MB, keeping the newest half. The launcher-owned `server-<port>.out.log` is excluded: the child holds that fd, so a rename would fork the file behind the writer's back.
+- `stopForAgent` validates ports through the shared `normalizePort`.
 - A failing `ws` resolution logs a line; it used to be swallowed, leaving the fleet link permanently offline with no diagnostics.
 
 ### Changed
 
-- The declared minimum DSH version is now `>=0.1.2-rc.1`: the previously declared `0.1.0-rc.5` does not exist on npm, and CI never covered it.
+- The declared minimum DSH version is now `>=0.1.2-rc.1`; the previously declared `0.1.0-rc.5` does not exist on npm.
 
 ## 0.9.13 - 2026-09-20
 
@@ -101,7 +123,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Maintenance
 
-- The shared-fragment CI check now runs in this repository (`loopback:check` / `guard:check`) instead of comparing across repositories.
+- The shared-fragment CI check now runs in this repository (`loopback:check` / `guard:check`).
 - The LICENSE copyright holder is now `xswt442-cmd`.
 
 ## 0.9.6 - 2026-09-14
@@ -152,7 +174,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Changed
 
-- `DSH Instance` and TreeKeeper now use a versioned Mini Utility Dock protocol.
+- The panel now speaks a versioned Mini Utility Dock protocol.
 - Dock registration is ownership-safe across HMR; opening one panel closes its active sibling.
 
 ### Fixed
