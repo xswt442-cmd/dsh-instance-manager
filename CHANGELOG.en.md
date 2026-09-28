@@ -25,6 +25,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 - CI runs on pull requests, checks all of `lib/`, and covers node 20 and 24; a failed boot log no longer echoes the launch token. `publish.yml` splits into checks / npm / release, only the release job can write, and a tag must sit on `main`.
 
+- The dock pin rises to 0.6.0 and all four embedded blocks re-sync (the fragments' comment text changed with it), so `http:check` compares the fourth block for real.
 ## 0.10.3 - 2026-09-25
 
 ### Added

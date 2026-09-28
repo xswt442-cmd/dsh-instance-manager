@@ -25,6 +25,7 @@ Release Notes 由对应版本段生成；最新版本在前。
 
 - CI 现在跑 pull request，`node --check` 覆盖 `lib/` 全部文件，并在 node 20 与 24 上各跑一次；失败日志不再回显 launch token。`publish.yml` 拆成 checks / npm / release，只有 release 持写权限，标签必须落在 `main` 已包含的提交上。
 
+- dock pin 抬到 0.6.0，四个嵌入块重新 sync（片段注释文本随之更新）；`http:check` 自此真的比对第四块。
 ## 0.10.3 - 2026-09-25
 
 ### 新增
