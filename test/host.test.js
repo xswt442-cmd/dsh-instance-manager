@@ -13,6 +13,11 @@ import {
   isLoopbackAddress,
   requestNeedsBearer,
   createGuard,
+  sendJson,
+  createRequirePost,
+  createBrowserAuthorizer,
+  connectionUnavailable,
+  CONNECTION_UNAVAILABLE,
   resolveDshBin,
   resolveDshHome,
   registryDir,
@@ -485,18 +490,42 @@ test('awaitChild returns empty (not died) when the confirm window just closes', 
 test('awaitChild stops probing once the race has a verdict', async () => {
   // Regression: the probe loop kept running to the full confirm window after
   // the race settled, probing a dead child every 500ms and racing a retry
-  // launch's probes. 5ms ticks against a 10s window make the drift observable.
-  let calls = 0
+  // launch's probes.
+  //
+  // The clock here is INJECTED rather than real: the test holds every pending
+  // sleep and hands out exactly the ticks it means to, so "no further probe
+  // fired" is an observed fact. Written against setTimeout it was a race between
+  // a 5ms tick and a 25ms wall-clock window, which failed on a loaded runner
+  // without anything being wrong with the code.
+  let probes = 0
+  const sleeping = []
+  const sleep = () => new Promise((resolve) => { sleeping.push(resolve) })
+  const nextTurn = () => new Promise((resolve) => setImmediate(resolve))
+  const advance = async (rounds) => {
+    for (let i = 0; i < rounds; i++) {
+      const wake = sleeping.shift()
+      assert.ok(wake, 'the probe loop must be waiting on its injected sleep')
+      wake()
+      await nextTurn()
+    }
+  }
+  const drain = async () => {
+    while (sleeping.length) await advance(1)
+  }
   const child = fakeChild()
-  const tick = () => new Promise((r) => setTimeout(r, 5))
-  const pending = awaitChild({ child, confirmMs: 10_000, sleep: tick, probe: async () => (++calls, false) })
-  await new Promise((r) => setTimeout(r, 20))
-  assert.ok(calls >= 1, 'probe loop must be running before a verdict')
+  const pending = awaitChild({
+    child,
+    confirmMs: 10_000,
+    sleep,
+    probe: async () => { probes += 1; return false }
+  })
+  await advance(2)
+  assert.equal(probes, 2, 'the loop is still probing when the verdict lands')
+
   child.fire('exit', 1)
   assert.deepEqual(await pending, { died: true, code: 1 })
-  const atSettle = calls
-  await new Promise((r) => setTimeout(r, 25))
-  assert.equal(calls, atSettle, 'no further probe may fire after the race settles')
+  await drain()
+  assert.equal(probes, 2, 'no further probe may fire after the race settles')
 })
 
 test('managedLocalPorts tracks managed LOCAL rows only', () => {

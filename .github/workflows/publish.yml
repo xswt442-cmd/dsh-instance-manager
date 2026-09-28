@@ -17,25 +17,33 @@ concurrency:
   group: publish
   cancel-in-progress: false
 
+# Job-level default: everything below reads the repository. The one job that
+# writes — the GitHub release — states it on its own, so `npm test` never runs
+# with a token that could change the repository it is testing.
+permissions:
+  contents: read
+
 jobs:
-  publish:
-    name: publish to npm
+  checks:
+    name: release checks
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Create the matching GitHub release.
-      id-token: write # npm provenance (OIDC).
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # full history, so the notes can compare against the previous tag
+          # The ancestry test below compares the tagged commit against `main`,
+          # and a default checkout of a tag has neither the branch nor a history
+          # deep enough to answer the question.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          # No `cache: npm`: it takes its key from a lockfile, and this repository
+          # tracks none on purpose (see .gitignore). `--ignore-scripts` below is
+          # what keeps a registry-side install hook out of the release gate.
 
       - name: install development dependencies
-        run: npm install --ignore-scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
 
       - name: tag matches package.json version
         shell: bash
@@ -47,13 +55,35 @@ jobs:
             exit 1
           fi
 
+      # A tag is the release's identity, so it has to point at a commit `main`
+      # already carries. Without this, a tag pushed on a side branch — or on a
+      # local commit that never merged — publishes code no branch was ever
+      # reviewed on, and the GitHub release's compare link describes a history
+      # that does not contain the thing being released.
+      - name: tag points at a commit on main
+        shell: bash
+        run: |
+          git fetch --no-tags --force origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main"
+            echo "::error::merge (or release-branch) that commit first, then tag the commit on main"
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} is contained in origin/main ($(git rev-parse --short refs/remotes/origin/main))"
+
+      # Every module the package ships, not the two that happened to be listed:
+      # `files` is "lib", and a syntax error in lib/fleet.js used to be caught
+      # only if an import happened to reach it.
+      - name: syntax check every module
+        shell: bash
+        run: |
+          set -e
+          for f in lib/*.js; do node --check "$f"; done
+
       - name: release checks
-        id: sanity
         shell: bash
         run: |
           tag=${GITHUB_REF_NAME#v}
-          node --check lib/client.js
-          node --check lib/index.js
           npm test
           npm run docs:check
           node --input-type=module -e "import('./lib/index.js').then(m => { if (!m.default || typeof m.default.apply !== 'function') process.exit(1) })"
@@ -62,6 +92,23 @@ jobs:
             exit 1
           }
           npm pack --dry-run
+
+  # npm Trusted Publishing (OIDC): no token secret exists, and this job needs no
+  # repository write at all — `id-token` is the only elevation it carries.
+  npm:
+    name: publish to npm
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance (OIDC).
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
 
       - name: skip when version is already published
         id: published
@@ -80,8 +127,29 @@ jobs:
         if: steps.published.outputs.already != 'yes'
         run: npm publish --provenance --access public
 
+  # The one job with repository write, and it is the smallest one: no install, no
+  # test run, just the release object built from the CHANGELOG section. Keeping it
+  # separate is what lets every step that EXECUTES this repository's code run
+  # against a read-only token.
+  release:
+    name: create GitHub release
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Create the matching GitHub release.
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history, so the notes can compare against the previous tag
+
+      # The runner image ships a node, but this step runs `scripts/release-notes.mjs`
+      # on it, so the job states which one rather than inheriting whatever the image
+      # happens to carry.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
       - name: GitHub release from changelog (idempotent)
-        if: always() && steps.sanity.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -96,10 +164,10 @@ jobs:
           else
             notes=$(printf '%s\n\n**完整变更**: [`%s`](%s/commits/%s)' "$notes" "$tag" "$repo" "$tag")
           fi
-          # Not gated on the publish step: a version published out of band — like
-          # the first one, before npm knows this package name at all — still needs
-          # its notes here. Re-running must converge rather than fail over an
-          # occupied name, so an existing release is refreshed instead.
+          # Not gated on the npm job: a version published out of band — like the
+          # first one, before npm knows this package name at all — still needs its
+          # notes here. Re-running must converge rather than fail over an occupied
+          # name, so an existing release is refreshed instead.
           if gh release view "$tag" > /dev/null 2>&1; then
             echo "::warning::release $tag already exists - refreshing its notes"
             gh release edit "$tag" --title "$tag" --notes "$notes"

@@ -53,7 +53,7 @@ test('the client registers a composer-dock launcher and two overlay surfaces', (
 
   const slots = {
     inject(name, mount) {
-      // This plugin's row joins the family menu; its panel and toasts ride the
+      // This plugin's row joins the launcher menu; its panel and toasts ride the
       // frame-wide overlay layer.
       assert.ok(name === 'createhelper.utility.item' || name === 'shell.overlay', name)
       mount()
@@ -117,7 +117,7 @@ test('the client registers a composer-dock launcher and two overlay surfaces', (
     'shell.overlay'
   ])
   // The launcher declares the menu's child seat, which is what authorizes every
-  // family member to contribute a row to it. JSON round-tripped: the options come
+  // plugin to contribute a row to it. JSON round-tripped: the options come
   // from the vm sandbox, so their prototypes are not this realm's.
   assert.deepEqual(JSON.parse(JSON.stringify(registered[1].options.children)), {
     'createhelper.utility.item': { kind: 'list', scope: 'root' }

@@ -149,8 +149,26 @@ class MemWSS {
 
 const wireMutualPeers = async () => {
   const dials = []
+  const waiting = []
+  // The two links are built from `deps` before anything is dialed, and a dial
+  // only happens after `resolveToken()` settles. Waiting for the sockets the
+  // injected constructor actually made is the honest condition — a fixed
+  // setTimeout just raced it, and lost on a loaded runner.
+  const untilDialed = (count) => dials.length >= count
+    ? Promise.resolve()
+    : new Promise((resolve) => { waiting.push({ count, resolve }) })
+  class Dial extends MemSocket {
+    constructor(url) {
+      super(url)
+      dials.push(this)
+      for (let i = waiting.length - 1; i >= 0; i--) {
+        if (dials.length < waiting[i].count) continue
+        const [wait] = waiting.splice(i, 1)
+        wait.resolve()
+      }
+    }
+  }
   const counts = { a: 0, b: 0 }
-  class Dial extends MemSocket { constructor(url) { super(url); dials.push(this) } }
   const build = (name, peerName) => {
     const node = { name, peerName }
     node.hub = new FleetLinks({
@@ -178,7 +196,7 @@ const wireMutualPeers = async () => {
   }
   const A = build('a', 'b')
   const B = build('b', 'a')
-  await new Promise((r) => setTimeout(r, 10))
+  await untilDialed(2)
   // A dials B and B dials A: hand each outbound socket to the other's inbound.
   const aSide = dials.find((d) => d.url === 'ws://b/link')
   const bSide = dials.find((d) => d.url === 'ws://a/link')

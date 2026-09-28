@@ -1,6 +1,11 @@
 # Deploy dsh-instance-manager INTO the local dsh web profile as a REAL
 # directory snapshot (replacing any dev symlink).
 #
+# This is a convenience for whoever develops the plugin on one particular
+# machine: it is not an installation path the repository promises, and the README
+# deliberately does not point at it. Nothing in the package depends on it, and
+# its profile layout assumptions are the running host's, not the plugin's.
+#
 # Why: a symlinked profile mount makes every working-tree edit a LIVE bundle
 # change — cordis-plugin-hmr reloads running instances on each save, and
 # multi-file refactors have inconsistent intermediate states that can take

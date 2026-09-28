@@ -21,8 +21,10 @@ jobs:
         with:
           node-version: 24
       # docs:check is a bin of the pinned dsh-mini-utility-dock dependency, so
-      # this job needs node_modules like every other workflow now.
-      - run: npm install --ignore-scripts
+      # this job needs node_modules like every other workflow now. `npm install`
+      # rather than `npm ci`, and no `cache: npm`: both take their input from a
+      # lockfile, and this repository tracks none on purpose (see .gitignore).
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run docs:check
       - name: require paired edits
         if: env.DOCS_BASE != ''
