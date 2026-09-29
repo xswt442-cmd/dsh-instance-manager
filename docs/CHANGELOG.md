@@ -3,6 +3,12 @@
 Release Notes 由对应版本段生成；最新版本在前。
 英文版见 [CHANGELOG.en.md](CHANGELOG.en.md)。
 
+## 0.10.6 - 2026-09-29
+
+### 维护
+
+- 兼容性验证覆盖 `0.2.0-rc.1`：Windows 与 Linux 各执行一次真实 boot。
+
 ## 0.10.5 - 2026-09-29
 
 ### 变更

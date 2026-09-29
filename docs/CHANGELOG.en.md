@@ -3,6 +3,12 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.10.6 - 2026-09-29
+
+### Maintenance
+
+- Compatibility verification covers `0.2.0-rc.1`: one real boot on Windows and one on Linux.
+
 ## 0.10.5 - 2026-09-29
 
 ### Changed
