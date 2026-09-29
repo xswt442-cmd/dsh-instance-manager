@@ -295,9 +295,9 @@ test('the start button leaves the busy state after the host answers', async () =
 })
 
 test('a failed follow-up refresh still releases the busy state', async () => {
-  // The clearing of `starting` used to sit AFTER the post-action refresh, so a
-  // throw out of that refresh left the disabled "Starting…" button on screen —
-  // the panel locked out of every later action, with the host perfectly healthy.
+  // `starting` comes down in the same finally that runs the post-action refresh,
+  // and ahead of it: a throw out of that refresh must never leave the disabled
+  // "Starting…" button on screen — the panel locked out of every later action.
   let listCalls = 0
   const panel = mountPanel({
     fetchImpl: async (url) => {

@@ -444,8 +444,8 @@ test('summarizeSessions caps at N newest rows', () => {
 
 // ---- launcher child: ready / exited / failed-to-spawn --------------------
 // The 'error' case is the one that matters: a ChildProcess that cannot start
-// emits 'error' and NO 'exit', and an unlistened 'error' event is
-// process-fatal, so a single failed launch used to kill the whole instance.
+// emits 'error' and NO 'exit', and an unlistened 'error' event is process-fatal,
+// so 'error' is always consumed and a failed launch is only ever reported.
 const fakeChild = () => {
   const handlers = {}
   return {
