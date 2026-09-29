@@ -3,6 +3,12 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- The port setting becomes a comma-separated list, and its default adds the desktop host's `19387` to `3080-3129`, so a desktop host without this plugin is listed too. The first range remains the start range.
+
 ## 0.10.6 - 2026-09-29
 
 ### Maintenance
