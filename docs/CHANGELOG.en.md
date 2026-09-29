@@ -5,6 +5,10 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+### Fixed
+
+- The version-skew tooltip states the current condition: the fleet stops being mixed once the panel's version and the instance's version match.
+
 ### Changed
 
 - The port setting becomes a comma-separated list, and its default adds the desktop host's `19387` to `3080-3129`, so a desktop host without this plugin is listed too. The first range remains the start range.
