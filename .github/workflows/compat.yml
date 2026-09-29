@@ -100,7 +100,8 @@ jobs:
         # plugin take different code paths there. Both paths are covered by unit
         # tests; this job is what proves the pair works against a real host.
         #
-        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2']
+        # 0.2.0-rc.1 is the newest anchor: the plugin-facing APIs this plugin reads are unchanged since 0.1.7-rc.2.
+        dsh-spec: ['@0.1.5-rc.3', '@0.1.7-rc.2', '@0.2.0-rc.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
