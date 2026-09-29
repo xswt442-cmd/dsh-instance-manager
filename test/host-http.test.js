@@ -108,9 +108,9 @@ test('the gate\'s defaults and its validation are the block\'s, not a local fork
   // plugin publishes a code no test expects.
   assert.throws(() => createRequirePost({ policy: { wrong_key: { code: 'x' } } }), /unknown policy key/)
   // The method is read case-insensitively and an absent one reads as GET — the
-  // wider reading than this plugin's own pre-fragment gate had, kept on purpose
-  // (see the note at the binding in `lib/index.js`). `test/routes.test.js` pins
-  // the same verdict on the mounted route rather than on a source string.
+  // wider reading, kept on purpose (see the note at the binding in
+  // `lib/index.js`). `test/routes.test.js` pins the same verdict on the mounted
+  // route rather than on a source string.
   assert.equal(plain({ method: 'post' }, fakeRes(), 'kill'), true)
   assert.equal(plain({}, fakeRes(), 'kill'), false)
 })

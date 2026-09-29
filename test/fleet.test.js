@@ -38,12 +38,10 @@ test('parsePeers drops junk, dedupes ids, strips trailing slashes, caps', () => 
 })
 
 // ---- inbound query answering (F3) ---------------------------------------
-// These used to be an inline closure inside the host's apply(), which meant
-// `ws` being absent in unit tests made them unreachable there — and two bugs
-// shipped through that gap: `sessions` dropped the requested port (answering
-// with the wrong instance's data instead of erroring) and `logs` handed an
-// unvalidated value to a filename. Both now delegate to the same functions
-// the local HTTP route uses, and these tests pin the delegation.
+// The responder delegates each kind to the same functions the local HTTP route
+// uses, so a peer reaches no code path the panel itself would refuse: `sessions`
+// forwards the requested port, and `logs` normalizes the stream before it names
+// a file. These tests pin that delegation.
 const makeResponder = (over = {}) => {
   const calls = []
   const deps = {
@@ -76,9 +74,9 @@ test('query responder answers fleet with local rows only', async () => {
 })
 
 test('query responder forwards the REQUESTED port to sessions', async () => {
-  // Regression: this branch used to call describeSessions() directly, so
-  // asking peer X for :3090 silently returned :3080's sessions — wrong data
-  // rather than an error, which is the worst failure mode for a fleet view.
+  // Regression: a branch that answered from this instance's own data would
+  // return :3080's sessions for a request naming :3090 — wrong data rather
+  // than an error, which is the worst failure mode for a fleet view.
   const { answer, calls } = makeResponder()
   const r = await answer({ kind: 'sessions', port: 3090 })
   assert.deepEqual(calls, [['sessions', 3090]], 'the requested port must survive the hop')
@@ -223,9 +221,9 @@ test('a mutually-peered pair answers one fleet query without amplification', asy
 })
 
 // ---- one link may not answer another link's question -------------------
-// A `query-result` used to be matched by reqId alone, so any socket that had
-// cleared the bearer could settle a query somebody else was waiting on — the
-// ids are a counter plus a timestamp, which is not a secret.
+// A `query-result` settles only the query that left on its own socket: reqId is
+// a counter plus a timestamp, not a secret, so matching on that id alone would
+// let any socket that cleared the bearer settle somebody else's query.
 const buildHub = () => {
   const answered = []
   const hub = new FleetLinks({

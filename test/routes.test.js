@@ -547,11 +547,11 @@ test('action=sessions refuses a present-but-invalid port, allows an absent one',
 })
 
 // The stop action forwards stop-self to the target port, so what counts as a
-// port has to be exactly what logs/sessions accept. It used to parse with
-// Number(), which reads '1e3' as 1000, '0x10' as 16 and '+80' as 80 — three
-// ports stop would happily forward to that logs rejects with a 400 — while a
-// fractional or negative value reached http.get and threw
-// ERR_SOCKET_BAD_PORT out of the handler, turning a bad request into a 500.
+// port has to be exactly what logs/sessions accept: stop parses with
+// normalizePort, which refuses '1e3', '0x10' and '+80' (Number() reads those as
+// 1000, 16 and 80 — ports stop would forward that logs rejects with a 400) and
+// refuses fractional or negative values before http.get can throw
+// ERR_SOCKET_BAD_PORT out of the handler as a 500 for a bad request.
 test('action=stop parses the port with the same rule as logs and sessions', async () => {
   for (const bad of [TRAVERSAL, '1e3', '0x10', '80.5', '-1', '+80', '0', '65536', 'abc', '']) {
     const r = await callApi('action=stop&port=' + encodeURIComponent(bad), 'POST')
@@ -570,9 +570,9 @@ test('action=stop still requires POST before it looks at the port', async () => 
   assert.equal(r.status, 405)
   assert.equal(r.json.code, 'need_post')
   // The embedded gate matches the method case-insensitively, so a lowercase
-  // `post` clears it where this plugin's own pre-fragment gate answered 405.
-  // Pinned on the mounted route because that widening is deliberate and is the
-  // gate's behavior this package ships (see the note at its binding).
+  // `post` clears it and the port parser answers 400. Pinned on the mounted
+  // route because the case-insensitive match is the gate's behavior this
+  // package ships (see the note at its binding).
   const lowered = await callApi('action=stop&port=1e3', 'post')
   assert.notEqual(lowered.status, 405, 'a lowercase method is not refused as a non-POST')
   assert.equal(lowered.status, 400, 'it reached the port parser, which is the next gate')
@@ -581,10 +581,10 @@ test('action=stop still requires POST before it looks at the port', async () => 
 
 // The discovery sweep is supposed to meet closed ports, so a fetch that fails
 // there is silence by design — but a read the caller ASKED for is not. Both
-// kinds used to resolve to the same swallowed `null`, which made "a foreign
-// service owns our API path" and "this instance went away" indistinguishable in
-// the host log. The value callers see must stay exactly as it was; only the
-// diagnosis is added.
+// failure classes resolve to the same swallowed `null`, so "a foreign service
+// owns our API path" and "this instance went away" are told apart in the host
+// log, each with its own class name. The value callers see is unchanged; only
+// the diagnosis is added.
 test('a forwarded read tells an unparsable answer from no answer at all', async () => {
   const http = await import('node:http')
   const originalWarn = console.warn
@@ -657,7 +657,7 @@ test('the discovery sweep stays silent about ports that do not answer', async ()
   }
 })
 
-// The POST gate is the embedded `dsh-host-http` fragment now, and this is the
+// The POST gate is the embedded `dsh-host-http` fragment, and this is the
 // shape this package has published since 0.4.1: the `need_post` code and the
 // rejected `action` in the body. Both are supplied as policy, so a re-sync of
 // the fragment that dropped the override would answer `{ code: 'method' }` and

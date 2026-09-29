@@ -71,9 +71,9 @@ jobs:
           fi
           echo "tag ${GITHUB_REF_NAME} is contained in origin/main ($(git rev-parse --short refs/remotes/origin/main))"
 
-      # Every module the package ships, not the two that happened to be listed:
-      # `files` is "lib", and a syntax error in lib/fleet.js used to be caught
-      # only if an import happened to reach it.
+      # Every module the package ships: `files` is the whole `lib` directory,
+      # and `node --check` parses one file without importing another, so a
+      # syntax error anywhere under `lib/` fails the release here.
       - name: syntax check every module
         shell: bash
         run: |

@@ -64,8 +64,8 @@ test('the client registers a composer-dock launcher and two overlay surfaces', (
   }
   let injected = null
   plugin.apply({
-    // The plugin must not probe `slots` with a one-shot get: a miss used to
-    // leave the panel silently absent. It waits through ctx.inject instead.
+    // The plugin must not probe `slots` with a one-shot get: a miss leaves the
+    // panel absent with nothing reported. It waits through ctx.inject instead.
     inject(names, mount) {
       injected = names
       if (Array.from(names).indexOf('locale') !== -1) {

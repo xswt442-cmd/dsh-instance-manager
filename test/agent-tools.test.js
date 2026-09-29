@@ -192,8 +192,8 @@ test('instance_sessions surfaces unavailability and rejects bad ports', async ()
 
 // Review finding: the reply may come from another instance, whose older or
 // newer route vocabulary is not this tool's output schema. An extra field
-// fails `additionalProperties: false` in the tools service, and an absent
-// `sessions` array used to throw inside render().
+// fails `additionalProperties: false` in the tools service, and render()
+// indexes `sessions` on the success path, so an absent one throws there.
 test('instance_sessions projects a foreign reply onto the declared keys', async () => {
   const declaration = byName(buildAgentTools(identity, makeApi().api)).instance_sessions
   const declared = Object.keys(declaration.output.schema.properties).sort()
