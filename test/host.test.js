@@ -30,7 +30,7 @@ import {
   awaitChild,
   managedLocalPorts,
   diffManagedPorts,
-  parsePortRange,
+  parsePortSpec,
   safeTokenEqual,
   buildDshLaunchArgs
 } from '../lib/shared.js'
@@ -554,23 +554,37 @@ test('diffManagedPorts reports joins and leaves between ticks', () => {
   assert.deepEqual(diffManagedPorts(new Set([3080]), new Set([3080])), { added: [], removed: [] })
 })
 
-test('parsePortRange honors the env override and falls back silently', () => {
-  assert.deepEqual(parsePortRange(undefined), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange(''), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('junk'), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('4000-4010'), { min: 4000, max: 4010 })
-  assert.deepEqual(parsePortRange(' 4000 - 4010 '), { min: 4000, max: 4010 }, 'whitespace tolerated')
-  assert.deepEqual(parsePortRange('80-80'), { min: 80, max: 80 }, 'single-port band allowed')
-  // invalid shapes and bounds fall back
-  assert.deepEqual(parsePortRange('4000'), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('5000-4000'), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('0-100'), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('1-70000'), { min: 3080, max: 3129 })
-  // An over-wide band is refused rather than obeyed: the local probe fans out
-  // over every port in the range, so `1-65535` would be a 65k-way scan.
-  assert.deepEqual(parsePortRange('1-65535'), { min: 3080, max: 3129 })
-  assert.deepEqual(parsePortRange('3080-4104'), { min: 3080, max: 3129 }, '1025-wide band is over the bound')
-  assert.deepEqual(parsePortRange('3080-4103'), { min: 3080, max: 4103 }, '1024-wide band is still allowed')
+test('parsePortSpec reads a list spec and falls back silently', () => {
+  // The built-in default sweeps dsh's Web band plus the port the desktop host
+  // takes by default, so a desktop host without this plugin is still found.
+  const fallback = { min: 3080, max: 3129, extra: [19387] }
+  assert.deepEqual(parsePortSpec(undefined), fallback)
+  assert.deepEqual(parsePortSpec(''), fallback)
+  assert.deepEqual(parsePortSpec('junk'), fallback)
+  assert.deepEqual(parsePortSpec('4000-4010'), { min: 4000, max: 4010, extra: [] })
+  assert.deepEqual(parsePortSpec(' 4000 - 4010 '), { min: 4000, max: 4010, extra: [] }, 'whitespace tolerated')
+  assert.deepEqual(parsePortSpec('80-80'), { min: 80, max: 80, extra: [] }, 'single-port band allowed')
+  // The first range is also the start range; later ranges are swept only.
+  assert.deepEqual(parsePortSpec('3080-3129,19387'), fallback)
+  assert.deepEqual(parsePortSpec('4000, 3080-3082'), { min: 4000, max: 4000, extra: [3080, 3081, 3082] })
+  assert.deepEqual(parsePortSpec('3080-3082,3081-3083'), { min: 3080, max: 3082, extra: [3083] },
+    'an overlapping range contributes only the ports outside the first')
+  assert.deepEqual(parsePortSpec('3080-3129,19387-19390'),
+    { min: 3080, max: 3129, extra: [19387, 19388, 19389, 19390] })
+  // invalid shapes and bounds fall back, and a bare single port is now a spec
+  // of its own rather than a rejected range
+  assert.deepEqual(parsePortSpec('4000'), { min: 4000, max: 4000, extra: [] })
+  assert.deepEqual(parsePortSpec('5000-4000'), fallback)
+  assert.deepEqual(parsePortSpec('0-100'), fallback)
+  assert.deepEqual(parsePortSpec('1-70000'), fallback)
+  assert.deepEqual(parsePortSpec('3080-3129,'), fallback, 'a trailing comma is malformed')
+  assert.deepEqual(parsePortSpec('3080-3129,19387,junk'), fallback, 'one bad part rejects the whole spec')
+  // The probe fans out over every port in the spec, so the bound covers the
+  // total, not each range.
+  assert.deepEqual(parsePortSpec('1-65535'), fallback)
+  assert.deepEqual(parsePortSpec('3080-4104'), fallback, '1025-wide band is over the bound')
+  assert.deepEqual(parsePortSpec('3080-4103'), { min: 3080, max: 4103, extra: [] }, '1024-wide band is still allowed')
+  assert.deepEqual(parsePortSpec('3080-3600,4000-4700'), fallback, 'the ranges add up past the bound')
 })
 
 // ---- tailFile ------------------------------------------------------------

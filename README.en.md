@@ -18,7 +18,7 @@ Preferences (refresh interval, fleet token, peer list, managed port range) are s
 ## Features
 
 - One row per instance: port, PID, uptime, live session count, resident memory, version, and whether it is the instance hosting this panel. The current instance always sorts first; everything else follows by ascending port.
-- Start a new instance. An empty port means the host picks the first free port in the managed range (3080-3129 by default); a named port is used exactly, and one that is already in use is reported instead of starting somewhere else.
+- Start a new instance. An empty port means the host picks the first free port in the start range (3080-3129 by default); a named port is used exactly, and one that is already in use is reported instead of starting somewhere else.
 - Open an instance: a row's `:port` navigates to that instance's UI. DSH requires the per-process launch token on an instance root, so the link targets a redirect endpoint: the host reads that instance's current token and answers 303, and the token never enters panel state or the link itself. When the instance was not started by this host's launcher there is no token to read, and the endpoint answers `launch_token_unavailable` naming the `dsh web` URL to use.
 - Stop one, the current, or all local instances; each stop goes through the target instance's own graceful shutdown. Remote rows are read-only and are never part of stop-all.
 - Read-only views per instance: stdout/stderr logs, session summaries, and what the instance is serving.
@@ -63,9 +63,9 @@ Which source is read depends on the host version:
 | live | `refreshIntervalMs` | number | `4000` | `1000`–`60000` ms; out-of-range is clamped to the bound, a fraction is rounded to the nearest integer |
 | live | `fleetToken` | string (secret) | none | any non-empty string; write-only in the UI, never carried by an API response or a log |
 | live | `peers` | string | `''` (no peers) | comma-separated `id@origin`, at most 16 entries; id is 1–32 characters of `[A-Za-z0-9_-]`; `http(s)://` may be omitted; a URL with userinfo is rejected |
-| startup | `portRange` | string | `'3080-3129'` | `min-max`, ports within `1`–`65535`, at most `1024` ports wide |
+| startup | `portRange` | string | `'3080-3129,19387'` | comma-separated ranges and single ports; ports within `1`–`65535`, at most `1024` ports across all ranges |
 
-`portRange` bounds only where a new instance may be started; discovery is heartbeat-driven, so an instance launched by hand with `--port 4000` still appears in the list. `peers` is directional: configure both ends when two machines should see each other. Remote rows are read-only and are not part of a local stop-all.
+The first range of `portRange` bounds where a new instance may start; every range bounds what discovery sweeps, and the sweep also covers heartbeat-known ports, so an instance launched by hand with `--port 4000` still appears in the list. The default adds the port the desktop host takes by default (`19387`), so a desktop host without this plugin is listed as well — identified by the injected boot manifest and not managed by this plugin. `peers` is directional: configure both ends when two machines should see each other. Remote rows are read-only and are not part of a local stop-all.
 
 The UI language follows the global DSH Settings → General language; the plugin stores no separate language preference.
 
@@ -77,11 +77,11 @@ Every field has an environment variable of the same name, for a deployment witho
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'            # live.refreshIntervalMs, decimal digits only
 $env:DSHIM_FLEET_TOKEN = '<long-random-secret>'    # live.fleetToken
 $env:DSHIM_PEERS = 'office@http://192.168.1.20:3080'  # live.peers, same format as the table
-$env:DSHIM_PORT_RANGE = '3080-3129'                # startup.portRange
+$env:DSHIM_PORT_RANGE = '3080-3129,19387'          # startup.portRange
 $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'   # see below: the token's REFERENCE name, not the token
 ```
 
-A single field resolves in this order: the source in effect on this host (see above) → the matching variable above → the built-in default. The environment is the composition `base` layer: below a value the user stored, above the schema default. Only a well-formed environment value enters that layer — a mistyped `DSHIM_PORT_RANGE` does not fail the registration; the value is dropped and the default range is used.
+A single field resolves in this order: the source in effect on this host (see above) → the matching variable above → the built-in default. The environment is the composition `base` layer: below a value the user stored, above the schema default. Only a well-formed environment value enters that layer — a mistyped `DSHIM_PORT_RANGE` does not fail the registration; the value is dropped and the built-in default is used.
 
 ### Fleet token resolution order
 

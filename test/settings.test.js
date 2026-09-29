@@ -21,7 +21,7 @@ import {
   resolveStartupSection,
   registerLiveSettings,
   registerStartupSettings,
-  parsePortRange
+  parsePortSpec
 } from '../lib/shared.js'
 import { parsePeers } from '../lib/fleet.js'
 
@@ -132,7 +132,7 @@ test('a corrupt stored section degrades to env/defaults and never blocks load', 
   assert.equal(bare.get()[FLEET_TOKEN_FIELD], undefined)
   assert.equal(bare.get()[PEERS_FIELD], '')
   const bareStartup = registerStartupSettings({ ctx: mockSettingsHost({ fail: true }).ctx, z, env: {} })
-  assert.deepEqual(parsePortRange(bareStartup.get()[PORT_RANGE_FIELD]), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortSpec(bareStartup.get()[PORT_RANGE_FIELD]), { min: 3080, max: 3129, extra: [19387] })
 })
 
 test('settings section overrides env base; absent fields re-inherit env', () => {
@@ -179,17 +179,19 @@ test('missing schemastery or settings service degrades without throwing', () => 
   assert.equal(registerLiveSettings({ ctx: {}, z: null }).get()[REFRESH_INTERVAL_FIELD], 4000)
 })
 
-test('port range resolution: user over env over default; garbage falls back at consumption', () => {
+test('port spec resolution: user over env over default; garbage falls back at consumption', () => {
   assert.deepEqual(
     resolveStartupSection({ [PORT_RANGE_FIELD]: '4200-4209' }, { DSHIM_PORT_RANGE: '4300-4309' }),
     { [PORT_RANGE_FIELD]: '4200-4209' })
   assert.deepEqual(resolveStartupSection({}, { DSHIM_PORT_RANGE: '4300-4309' }),
     { [PORT_RANGE_FIELD]: '4300-4309' })
-  assert.deepEqual(resolveStartupSection(undefined, {}), { [PORT_RANGE_FIELD]: '3080-3129' })
+  assert.deepEqual(resolveStartupSection(undefined, {}), { [PORT_RANGE_FIELD]: '3080-3129,19387' })
   // Garbage survives in the section (the schema is a plain string) but
-  // parsePortRange falls back exactly like the old env-only path.
+  // parsePortSpec falls back exactly like the old env-only path.
   const garbage = resolveStartupSection({ [PORT_RANGE_FIELD]: 'nonsense' }, {})
-  assert.deepEqual(parsePortRange(garbage[PORT_RANGE_FIELD]), { min: 3080, max: 3129 })
+  assert.deepEqual(parsePortSpec(garbage[PORT_RANGE_FIELD]), { min: 3080, max: 3129, extra: [19387] })
+  // A list value is carried through the env base layer unchanged.
+  assert.deepEqual(buildStartupBase({ DSHIM_PORT_RANGE: '3080-3129,19387' }), { [PORT_RANGE_FIELD]: '3080-3129,19387' })
   // Garbage env is never carried into the base layer (a garbage base would
   // fail the whole section at registration).
   assert.deepEqual(buildStartupBase({ DSHIM_PORT_RANGE: 'junk' }), {})

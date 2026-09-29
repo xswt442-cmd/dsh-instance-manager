@@ -13,12 +13,12 @@
 
 DSH Web 的实例管理器。它为本机可见的每个 dsh web 实例显示一行状态，并负责这些实例的启动、打开与停止；配置 peer 后，同一面板也可查询其他机器上的实例。入口是工作区左下、侧边栏右侧的菜单图标，菜单容器与菜单行由 `dsh-mini-utility-dock` 的 `dsh-utility-launcher` 片段提供。
 
-偏好项（刷新间隔、Fleet token、peer 列表、托管端口段）按是否需要重启分为 `live` 与 `startup` 两节。实际读取的来源取决于宿主版本：DSH 0.1.7-rc.1 及之后读取 profile 条目自身的 `config`，更早版本读取设置服务注册的两个命名空间（见配置章）。两路来源都未提供值时使用环境变量与内置默认值，面板功能不受影响。
+偏好项（刷新间隔、Fleet token、peer 列表、端口清单）按是否需要重启分为 `live` 与 `startup` 两节。实际读取的来源取决于宿主版本：DSH 0.1.7-rc.1 及之后读取 profile 条目自身的 `config`，更早版本读取设置服务注册的两个命名空间（见配置章）。两路来源都未提供值时使用环境变量与内置默认值，面板功能不受影响。
 
 ## 功能
 
 - 每个实例一行：端口、PID、运行时长、会话数、常驻内存、版本，以及它当前是否为该面板所在实例。当前实例恒排第一行，其余按端口升序。
-- 启动新实例：端口留空时在托管端口段（默认 3080–3129）内挑第一个空闲端口，填入端口则在指定端口启动。指定端口已被占用时明确报错，不会改到别的端口。
+- 启动新实例：端口留空时在起始端口段（默认 3080–3129）内挑第一个空闲端口，填入端口则在指定端口启动。指定端口已被占用时明确报错，不会改到别的端口。
 - 打开实例：点击某行的 `:端口` 跳转到该实例界面。DSH 要求实例根 URL 携带每进程的启动 token，因此该链接指向一个重定向端点，由宿主读出该实例当前 token 后 303 跳转；token 不进入面板状态或链接本身。实例不由本机 launcher 启动（读不到 token）时返回 `launch_token_unavailable`，提示改用 `dsh web` 打印的 URL。
 - 停止实例：单个、当前或全部本地实例，都通过目标实例自身的优雅退出完成；远程行只读，不参与 stop-all。
 - 每个实例的只读视图：stdout/stderr 日志、会话概要，以及该实例正在跑什么。
@@ -48,7 +48,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 两节按是否需要重启划分，名称在两种来源中一致：
 
 - `live` —— 刷新间隔、Fleet token、peer 列表。宿主 watch 该节，修改即时生效。
-- `startup` —— 托管端口段。`applies: 'restart'`，宿主仅在构造时读取一次；设置界面把尚未生效的修改标记为「待生效」。
+- `startup` —— 端口清单，首段为启动范围。`applies: 'restart'`，宿主仅在构造时读取一次；设置界面把尚未生效的修改标记为「待生效」。
 
 实际读取的来源取决于宿主版本：
 
@@ -63,9 +63,9 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 | live | `refreshIntervalMs` | number | `4000` | `1000`–`60000` 毫秒；超出会被夹到边界，小数取整到最近整数 |
 | live | `fleetToken` | string（secret） | 无 | 任意非空字符串；UI 与响应里只写不读，任何 API 应答与日志都不带它 |
 | live | `peers` | string | `''`（无 peer） | `id@origin` 逗号分隔，最多 16 条；id 为 1–32 位 `[A-Za-z0-9_-]`；origin 可省 `http(s)://`；带 userinfo 的 URL 被拒绝 |
-| startup | `portRange` | string | `'3080-3129'` | `min-max`，端口在 `1`–`65535`，跨度最多 `1024` 个端口 |
+| startup | `portRange` | string | `'3080-3129,19387'` | 逗号分隔的范围与单端口；端口在 `1`–`65535`，各段合计最多 `1024` 个端口 |
 
-`portRange` 仅约束新实例可使用的端口范围；实例发现由心跳驱动，以 `--port 4000` 手工启动的实例仍会出现在列表中。`peers` 为单向配置：需要双向可见时在两端各配置一份。远程行只读，不参与本地 stop-all。
+`portRange` 的第一段是新实例可用的端口范围，其余各段只参与实例发现；扫描同时覆盖心跳登记过的端口，因此以 `--port 4000` 手工启动的实例仍会出现在列表中。默认值额外包含桌面端宿主的默认端口 `19387`，未安装本插件的桌面端也会被列入（按注入的 boot manifest 识别，不由本插件托管）。`peers` 为单向配置：需要双向可见时在两端各配置一份。远程行只读，不参与本地 stop-all。
 
 界面语言跟随 DSH Settings → General 的全局语言设置，本插件不单独存储语言偏好。
 
@@ -77,11 +77,11 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 $env:DSHIM_REFRESH_INTERVAL_MS = '4000'            # live.refreshIntervalMs，仅接受十进制整数
 $env:DSHIM_FLEET_TOKEN = '<long-random-secret>'    # live.fleetToken
 $env:DSHIM_PEERS = 'office@http://192.168.1.20:3080'  # live.peers，格式同上表
-$env:DSHIM_PORT_RANGE = '3080-3129'                # startup.portRange
+$env:DSHIM_PORT_RANGE = '3080-3129,19387'          # startup.portRange
 $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'   # 见下：token 的「引用名」，不是 token 本身
 ```
 
-单个字段的取值顺序为：当前生效的来源（见上）→ 同名环境变量 → 内置默认值。环境变量属于 composition 的 `base` 层，位于用户已存的值之下、schema 默认值之上。仅格式正确的环境变量值参与该层：格式错误的 `DSHIM_PORT_RANGE` 不会导致注册失败，该值被忽略并使用默认端口段。
+单个字段的取值顺序为：当前生效的来源（见上）→ 同名环境变量 → 内置默认值。环境变量属于 composition 的 `base` 层，位于用户已存的值之下、schema 默认值之上。仅格式正确的环境变量值参与该层：格式错误的 `DSHIM_PORT_RANGE` 不会导致注册失败，该值被忽略并使用内置默认值。
 
 ### Fleet token 的解析顺序
 
