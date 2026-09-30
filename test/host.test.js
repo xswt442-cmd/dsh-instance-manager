@@ -32,7 +32,16 @@ import {
   diffManagedPorts,
   parsePortSpec,
   safeTokenEqual,
-  buildDshLaunchArgs
+  buildDshLaunchArgs,
+  DESKTOP_HOST_RE,
+  detectRuntime,
+  isElectronNode,
+  LAUNCHER_ENV,
+  PARENT_PID_ENV,
+  launcherOf,
+  parentPidOf,
+  buildSpawnEnv,
+  dshBinVersion
 } from '../lib/shared.js'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -49,6 +58,100 @@ test('RC1 launch args split browser token handoff from headless agent starts', (
   assert.equal(ui.includes('--no-open'), false, 'browser start must open the one-time token URL')
   assert.equal(agent.includes('--no-open'), true, 'agent start must remain headless')
   assert.ok(agent.indexOf('--profile') < agent.indexOf('--no-open'))
+})
+
+test('detectRuntime recognises the desktop host by its entry script', () => {
+  // The desktop app's own host: the same exe, running the desktop-host entry
+  // point unpacked from app.asar.
+  assert.equal(detectRuntime([
+    'E:\\DSH\\DeepSeek Harness.exe',
+    '--expose-internals',
+    'E:\\DSH\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\index.js'
+  ]), 'desktop')
+  assert.equal(detectRuntime(['/opt/DSH/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js']), 'desktop')
+  assert.equal(detectRuntime(['node', '/opt/dsh/lib/index.js', '--dsh-desktop-host-marker']), 'desktop', 'any argv element may carry the marker')
+})
+
+test('an Electron-launched web instance stays node, not desktop', () => {
+  // Measured counterexample: the desktop panel spawns plain web instances from
+  // the app's own executable, and they inherit ELECTRON_RUN_AS_NODE=1. The env
+  // flag is therefore reported but never decisive — treating it as "desktop"
+  // would leave an ordinary web instance impossible to stop.
+  const argv = [
+    'E:\\DSH\\DeepSeek Harness.exe',
+    '--trace-exit',
+    '--unhandled-rejections=strict',
+    'C:\\Users\\x\\.dsh\\profiles\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js'
+  ]
+  assert.equal(detectRuntime(argv), 'node')
+  assert.equal(isElectronNode({ ELECTRON_RUN_AS_NODE: '1' }, {}), true)
+  assert.equal(isElectronNode({ ELECTRON_RUN_AS_NODE: '1' }, { electron: '38.0.0' }), true)
+  assert.equal(isElectronNode({}, { electron: '38.0.0' }), true)
+  assert.equal(isElectronNode({}, {}), false)
+  // Called with its defaults this reads the LIVE environment, which inside the
+  // desktop's own process tree already carries the flag — for this plain node
+  // test runner too. That is exactly why the flag must not decide the runtime,
+  // so only its type is asserted here rather than a host-dependent value.
+  assert.equal(typeof isElectronNode(), 'boolean')
+})
+
+test('detectRuntime never claims desktop from a missing or non-string argv', () => {
+  assert.equal(detectRuntime([]), 'node')
+  assert.equal(detectRuntime(undefined), 'node')
+  assert.equal(detectRuntime(['node', null, 42, { a: 1 }]), 'node')
+  assert.equal(DESKTOP_HOST_RE.test('C:/dsh/lib/bin.js'), false)
+})
+
+test('launcherOf and parentPidOf read the spawn markers and fail to null', () => {
+  assert.equal(launcherOf({ [LAUNCHER_ENV]: 'desktop' }), 'desktop')
+  assert.equal(launcherOf({ [LAUNCHER_ENV]: 'web' }), 'web')
+  assert.equal(launcherOf({ [LAUNCHER_ENV]: 'elsewhere' }), null)
+  assert.equal(launcherOf({}), null)
+  assert.equal(launcherOf(undefined), null)
+  assert.equal(parentPidOf({ [PARENT_PID_ENV]: '4242' }), 4242)
+  // 0, negatives and junk are "unknown", not a pid.
+  for (const bad of ['0', '-3', '12.5', '1e3', 'abc', '']) {
+    assert.equal(parentPidOf({ [PARENT_PID_ENV]: bad }), null, bad)
+  }
+  assert.equal(parentPidOf({}), null)
+  assert.equal(parentPidOf(undefined), null)
+})
+
+test('buildSpawnEnv forces ELECTRON_RUN_AS_NODE on the desktop and keeps inheritance', () => {
+  const base = { PATH: '/bin', ELECTRON_RUN_AS_NODE: '1' }
+  const desktop = buildSpawnEnv(base, { runtime: 'desktop', parentPid: 99 })
+  assert.equal(desktop.ELECTRON_RUN_AS_NODE, '1')
+  assert.equal(desktop[LAUNCHER_ENV], 'desktop')
+  assert.equal(desktop[PARENT_PID_ENV], '99')
+  assert.equal(desktop.PATH, '/bin')
+  assert.equal(base[LAUNCHER_ENV], undefined, 'the base env must not be mutated')
+  // A web instance started FROM the desktop inherits the flag and must keep it:
+  // the same Electron exe is the node runtime only while that flag is set.
+  const inherited = buildSpawnEnv({ ELECTRON_RUN_AS_NODE: '1' }, { runtime: 'node', parentPid: 42 })
+  assert.equal(inherited.ELECTRON_RUN_AS_NODE, '1')
+  assert.equal(inherited[LAUNCHER_ENV], 'web')
+  assert.equal(inherited[PARENT_PID_ENV], '42')
+  // A plain node host adds neither.
+  const plain = buildSpawnEnv({ PATH: '/bin' }, { runtime: 'node', parentPid: null })
+  assert.equal(plain.ELECTRON_RUN_AS_NODE, undefined)
+  assert.equal(plain[LAUNCHER_ENV], 'web')
+  assert.equal(plain[PARENT_PID_ENV], undefined)
+})
+
+test('dshBinVersion reads the package beside the launcher and degrades to null', () => {
+  const bin = path.join('C:', 'Users', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  let asked = null
+  const read = (f) => { asked = f; return JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.0-rc.1' }) }
+  assert.equal(dshBinVersion(bin, read), '0.2.0-rc.1')
+  assert.equal(asked, path.join('C:', 'Users', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+  // A missing, unreadable or versionless package reports "unknown" instead of
+  // throwing: the start itself succeeded and must still be reported.
+  assert.equal(dshBinVersion(bin, () => 'not json'), null)
+  assert.equal(dshBinVersion(bin, () => { throw new Error('ENOENT') }), null)
+  assert.equal(dshBinVersion(bin, () => JSON.stringify({ name: 'x' })), null)
+  assert.equal(dshBinVersion(bin, () => JSON.stringify({ version: '' })), null)
+  assert.equal(dshBinVersion(undefined, read), null)
+  assert.equal(dshBinVersion(bin, null), null)
 })
 
 test('isLoopbackName accepts every documented loopback name', () => {

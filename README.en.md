@@ -107,6 +107,15 @@ The value of `DSHIM_FLEET_TOKEN_REF` is the name of the environment variable hol
 - The token is resolved per request, so rotating it needs no restart.
 - When all three are empty the remote surface is closed entirely, and the local panel is unaffected.
 
+## Instance fields
+
+The heartbeat file `<home>/run/instances/<port>.json`, the `action=self` reply and the agent tool rows share one set of identity fields:
+
+- `runtime`: `desktop` marks the desktop app's own host process, which every stop operation skips, and `node` marks an ordinary web instance. The criterion is the entry script the host was asked to run, so the environment flag (`ELECTRON_RUN_AS_NODE`) is a diagnostic field only: a web instance started from the desktop carries it too.
+- `launcher`: the host kind that started this instance, `desktop` or `web`, and `parentPid`: the pid of the host that spawned it. A patched host injects both, and they are `null` when unavailable.
+- A host started before this version writes none of these fields and its row is read as `node`, identifying itself only after one restart.
+- `name` is the listing process's own executable name, identical on every row of one listing and never the listed instance's identity; tell instances apart by `runtime`, `pid` and `version`.
+
 ## Security
 
 - This plugin's own guard rejects cross-site origins, non-loopback hosts, and unsafe Fetch Metadata; a host that mounts Connection carries that layer instead.

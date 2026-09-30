@@ -107,6 +107,15 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 - token 按请求解析，更换后无需重启实例。
 - 三项均为空时远程功能整体关闭，本地面板不受影响。
 
+## 实例字段
+
+心跳文件 `<home>/run/instances/<port>.json`、`action=self` 应答与 agent 工具的行共用同一组身份字段：
+
+- `runtime`：`desktop` 表示桌面应用自己的宿主进程，任何停止操作都跳过它；`node` 表示普通 web 实例。判据是宿主被要求运行的入口脚本，因此环境变量（`ELECTRON_RUN_AS_NODE`）只作为诊断字段：桌面端启动的 web 实例同样带该变量。
+- `launcher`：启动该实例的宿主类型，`desktop` 或 `web`；`parentPid`：发起启动的宿主 pid。两者由打过补丁的宿主注入，取不到时为 `null`。
+- 本版之前启动的宿主不写这些字段，其行按 `node` 处理，重启一次后才自我标识。
+- `name` 是列表进程自己的可执行文件名，同一份列表里每行相同，不是被列实例的身份；区分实例请用 `runtime`、`pid` 与 `version`。
+
 ## 安全
 
 - 插件自带的本地守卫拒绝跨站 Origin、非回环 Host 与不安全的 Fetch Metadata；宿主挂载了 Connection 时，这一层由它承担。

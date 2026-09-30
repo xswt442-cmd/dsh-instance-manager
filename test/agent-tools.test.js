@@ -111,6 +111,26 @@ test('instance_stop forwards foreign ports and validates its argument', async ()
   assert.deepEqual(calls.stop, [3099], 'invalid ports never reach the api')
 })
 
+test("instance_stop surfaces the host's desktop refusal unchanged", async () => {
+  // The host owns the desktop decision (a port number says nothing about what is
+  // behind it) and this tool runs on a stock node:test runner, so the refusal
+  // arrives as an api result. It must pass both the code and the reason through
+  // verbatim — an agent reads the rendered text, not a status code.
+  const refusal = {
+    ok: false,
+    code: 'stop_desktop_refused',
+    error: 'the target is a desktop host: stopping it would leave the desktop window without a backend'
+  }
+  const { api, calls } = makeApi({ stop: async (port) => { calls.stop.push(port); return refusal } })
+  const stopDef = byName(buildAgentTools(identity, api)).instance_stop
+  const r = await stopDef.execute({ port: 19387 })
+  assert.deepEqual(r, refusal)
+  assert.deepEqual(calls.stop, [19387])
+  // The rendered line prefers `error` over `code`, so the reason a human sees is
+  // the host's own wording, not a bare code.
+  assert.match(stopDef.output.render({ port: 19387 }, r)[0].text, /desktop host/)
+})
+
 test('instance_logs rejects a non-port before it can be forwarded to a peer', async () => {
   // The host validates too, but the port can leave this machine over the
   // fleet link, and it is interpolated into a filename on the far side.
