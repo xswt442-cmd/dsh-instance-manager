@@ -3,6 +3,25 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.11.0 - 2026-09-30
+
+### Fixed
+
+- The desktop host is never ended by a stop operation: the single-instance stop, stop-all and the agent stop tool skip it, and stop-all reports the skipped count; the desktop window depends on that host for its backend.
+- The panel opens an instance page on the desktop through the host's absolute token address; the desktop app refuses the relative redirect.
+
+### Changed
+
+- A desktop host row keeps its stop button, disabled and with the stated reason, and gains a `desktop` badge; opening that instance page stays available.
+- A start from the desktop passes `--no-open` and hands off to no browser; the start result and the panel both report the dsh launcher path and version that ran.
+- A desktop host passes the desktop runtime marker to the child process explicitly.
+- Instance rows carry `runtime` (`desktop` / `node`), `launcher` and `parentPid`; `runtime` comes back with the instance list and with an agent tool row, while `launcher` and `parentPid` are written into the heartbeat file only. A host that reports no `runtime` is read as `node`, and a missing `launcher` or `parentPid` is `null`.
+- `name`, as `instance_list` describes it, is the listing process's own executable name, identical on every row of one listing, never the listed instance's identity; the field does not appear in an agent tool row.
+
+### Maintenance
+
+- The instance registry home prefers the boot layer's `dshHomePath` accessor and falls back to the previous resolution when the host provides none.
+
 ## 0.10.7 - 2026-09-29
 
 ### Fixed

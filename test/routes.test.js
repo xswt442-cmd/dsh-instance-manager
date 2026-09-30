@@ -24,7 +24,7 @@ const LINK_PATH = '/dsh-instance-manager/link'
 // `config` is what the profile entry hands to apply() as the second argument
 // (0.1.7-rc.1 and later); leaving it undefined reproduces the older lines,
 // where the settings service is the only source of these values.
-const mount = ({ upgradeSupport = true, connection, config, port } = {}) => {
+const mount = ({ upgradeSupport = true, connection, config, port, tools, hostHome } = {}) => {
   const routes = []
   const upgrades = []
   const getCalls = []
@@ -50,7 +50,14 @@ const mount = ({ upgradeSupport = true, connection, config, port } = {}) => {
     webServer,
     get: (name) => {
       getCalls.push(name)
-      return name === 'webServer' ? webServer : undefined
+      if (name === 'webServer') return webServer
+      // Opt-in only: without one, the agent-tool row stays unmounted and the
+      // service-lookup counts the tests below pin keep their old shape.
+      if (name === 'tools') return tools
+      // Only the mount that needs the boot layer's home accessor supplies one;
+      // without one the plugin falls back to resolveDshHome(process.env).
+      if (name === 'dshHomePath') return hostHome ? () => hostHome : undefined
+      return undefined
     },
     effect(factory) {
       const result = factory()
@@ -418,6 +425,259 @@ test('action=open refuses a log whose host, port, or token does not match', asyn
   const ok = await withLauncherLog(3101, 'dsh web: http://127.0.0.1:3101/?token=X', () => openRedirect('action=open&port=3101'))
   assert.equal(ok.status, 303)
   assert.equal(ok.headers.location, '/?token=X')
+})
+
+// ---- action=open-url (absolute address for the desktop shell) --------------
+// The desktop window is served from dsh-app://app, where `open`'s relative
+// location is not a browser URL and the app shell denies every window.open that
+// is not http(s) — so the desktop row cannot follow the redirect and has to fetch
+// the absolute address instead. Same token resolution, same guard, one fewer hop.
+test('action=open-url answers the absolute token address as JSON', async () => {
+  const r = await withLauncherLog(3101, 'dsh web: http://127.0.0.1:3101/?token=ABS_TOKEN', () => (
+    openRedirect('action=open-url&port=3101')
+  ))
+  assert.equal(r.status, 200)
+  assert.equal(r.headers['cache-control'], 'no-store')
+  const json = JSON.parse(r.body)
+  assert.equal(json.ok, true)
+  assert.equal(json.port, 3101)
+  assert.equal(json.url, 'http://127.0.0.1:3101/?token=ABS_TOKEN')
+})
+
+test('action=open-url reports an unavailable token and an unusable port as codes', async () => {
+  // No token in the log: the panel maps the code into its own wording, so the
+  // code must be the client's key and not a naked 409.
+  const noToken = await withLauncherLog(3101, 'dsh web: http://127.0.0.1:3101/', () => (
+    openRedirect('action=open-url&port=3101')
+  ))
+  assert.equal(noToken.status, 409)
+  assert.equal(JSON.parse(noToken.body).code, 'launch_token_unavailable')
+  // A token belonging to another port is not handed out for this one.
+  const otherPort = await withLauncherLog(3101, 'dsh web: http://127.0.0.1:3102/?token=OTHER', () => (
+    openRedirect('action=open-url&port=3101')
+  ))
+  assert.equal(otherPort.status, 409)
+  assert.equal(JSON.parse(otherPort.body).code, 'launch_token_unavailable')
+  for (const bad of [TRAVERSAL, '1e3', '', '65536']) {
+    const r = await callApi('action=open-url&port=' + encodeURIComponent(bad))
+    assert.equal(r.status, 400, 'port=' + bad)
+    assert.equal(r.json.code, 'no_port', 'port=' + bad)
+  }
+})
+
+// ---- desktop host: never a stop target ------------------------------------
+// The desktop app treats ANY exit of its own host as a failure, so a stop that
+// lands there leaves the window without a backend, in an error state only a
+// relaunch clears. A port number says nothing about what is behind it, so the
+// target is identified by its OWN report — and only a positive
+// `runtime:'desktop'` refuses: a silent or runtime-less target keeps the old
+// forward and the old conclusion, because inferring instead would strand every
+// instance that predates the field.
+const asDesktopHost = async (fn) => {
+  // apply() decides the runtime from its own argv at mount time, so swapping in
+  // the desktop host's entry script is the whole switch.
+  const saved = process.argv
+  process.argv = [
+    saved[0],
+    path.join('DSH', 'resources', 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'index.js')
+  ]
+  try { return await fn() } finally { process.argv = saved }
+}
+
+// A fake instance: answers action=self with the report it was given and every
+// other request with `ack`, and records what it received so a test can assert
+// what did NOT arrive.
+const withFakeTarget = async ({ self, ack = { ok: false, note: 'no ack' } }, fn) => {
+  const http = await import('node:http')
+  const seen = []
+  const server = http.createServer((req, res) => {
+    const url = String(req.url)
+    seen.push(url)
+    const body = url.includes('action=self')
+      ? (typeof self === 'function' ? self(server.address().port) : self)
+      : ack
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    return await fn({ port: server.address().port, seen })
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+}
+
+// A temp DSH_HOME keeps these mounts' heartbeats and breadcrumbs out of the
+// developer's real home, and the self-exit is always stubbed and counted: which
+// host schedules it is exactly what these tests assert.
+const withTempHome = async (fn) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-desktop-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const originalExit = process.exit
+  const exits = []
+  process.exit = (code) => { exits.push(code) }
+  try {
+    return await fn({ home, exits })
+  } finally {
+    process.exit = originalExit
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+}
+
+// The agent tools reach the same guard through a second door, so this needs a
+// service that captures definitions and a resolvable @deepseek-ai/dsh-tools:
+// loadDefineTool falls back to createRequire(dshBin()), which is the only
+// resolution path available without the real harness installed.
+const stubToolsResolution = (home) => {
+  const dshDir = path.join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'lib')
+  const toolsDir = path.join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-tools')
+  fs.mkdirSync(dshDir, { recursive: true })
+  fs.mkdirSync(toolsDir, { recursive: true })
+  fs.writeFileSync(path.join(dshDir, 'bin.js'), '')
+  fs.writeFileSync(path.join(toolsDir, 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh-tools', version: '0.0.0', main: 'index.js'
+  }))
+  fs.writeFileSync(path.join(toolsDir, 'index.js'), 'module.exports = { defineTool: (d) => d }\n')
+}
+
+const mountTools = async ({ config, port }) => {
+  const registered = []
+  const { dispose } = mount({ config, port, tools: { register: (def) => { registered.push(def) } } })
+  // mountAgentTools resolves its module asynchronously: wait for the five
+  // definitions instead of assuming they registered by the time apply returned.
+  const deadline = Date.now() + 3000
+  while (registered.length < 5 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  return { registered, dispose }
+}
+
+test('action=stop refuses a target whose own report says desktop, without forwarding', async () => {
+  const r = await withFakeTarget({ self: (port) => ({ ok: true, pid: 4242, port, runtime: 'desktop' }) }, async ({ port, seen }) => {
+    const out = await callApi('action=stop&port=' + port, 'POST')
+    return { out, seen: [...seen] }
+  })
+  assert.equal(r.out.status, 200)
+  assert.equal(r.out.json.ok, false)
+  assert.equal(r.out.json.code, 'stop_desktop_refused')
+  // The refusal came from asking the target: one that never probed would also
+  // refuse an ordinary web instance, which is the regression this pins.
+  assert.equal(r.seen.filter((u) => u.includes('action=self')).length, 1)
+  assert.equal(r.seen.some((u) => u.includes('stop-self')), false, 'a refused stop is never forwarded')
+})
+
+test('action=stop still forwards when the target is not desktop or does not say', async () => {
+  const node = await withFakeTarget({ self: (port) => ({ ok: true, pid: 7, port, runtime: 'node' }), ack: { ok: true } }, async ({ port, seen }) => {
+    const out = await callApi('action=stop&port=' + port, 'POST')
+    return { out, seen: [...seen] }
+  })
+  assert.equal(node.out.json.ok, true)
+  assert.equal(node.seen.filter((u) => u.includes('action=stop-self')).length, 1)
+
+  // A report that carries no runtime is not evidence of a desktop host: the old
+  // forward happens, and the caller gets the old conclusion.
+  const silent = await withFakeTarget({ self: (port) => ({ ok: true, pid: 9, port }) }, async ({ port, seen }) => {
+    const out = await callApi('action=stop&port=' + port, 'POST')
+    return { out, seen: [...seen] }
+  })
+  assert.equal(silent.out.json.code, 'stop_unconfirmed')
+  assert.equal(silent.seen.filter((u) => u.includes('action=stop-self')).length, 1)
+
+  // Neither is no answer at all: the same contract, the same conclusion.
+  const http = await import('node:http')
+  const originalWarn = console.warn
+  console.warn = () => {}
+  let server
+  try {
+    server = http.createServer((req, res) => { res.writeHead(200); res.end('{}') })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const gone = server.address().port
+    await new Promise((resolve) => server.close(resolve))
+    const r = await callApi('action=stop&port=' + gone, 'POST')
+    assert.equal(r.json.code, 'stop_unconfirmed')
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test('action=stop-all skips a desktop row, and a desktop host never stops itself', async () => {
+  await withTempHome(async ({ exits }) => {
+    const r = await withFakeTarget({ self: (port) => ({ ok: true, pid: 4242, port, runtime: 'desktop' }) }, async ({ port, seen }) => {
+      const out = await asDesktopHost(() => callApiFull({
+        query: 'action=stop-all',
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      }))
+      return { out, seen: [...seen] }
+    })
+    assert.equal(r.out.status, 200)
+    assert.equal(r.out.json.ok, true)
+    assert.equal(r.out.json.skippedDesktop, 1, 'the desktop row is reported as skipped')
+    assert.equal(r.out.json.stoppedRemote, 0)
+    assert.equal(r.out.json.stoppedSelf, false, 'the desktop host keeps serving')
+    assert.equal(r.seen.some((u) => u.includes('stop-self')), false)
+    assert.deepEqual(exits, [], 'and no self-exit is scheduled')
+  })
+})
+
+test('a node host skips the desktop row too, and still stops itself', async () => {
+  await withTempHome(async ({ exits }) => {
+    const r = await withFakeTarget({ self: (port) => ({ ok: true, pid: 4242, port, runtime: 'desktop' }) }, async ({ port, seen }) => {
+      const out = await callApiFull({
+        query: 'action=stop-all',
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      })
+      return { out, seen: [...seen] }
+    })
+    assert.equal(r.out.json.skippedDesktop, 1)
+    assert.equal(r.out.json.stoppedRemote, 0)
+    assert.equal(r.out.json.stoppedSelf, true)
+    assert.equal(r.seen.some((u) => u.includes('stop-self')), false)
+    assert.deepEqual(exits, [0], 'the ordinary host still leaves on request')
+  })
+})
+
+test('the agent stop tool refuses a desktop target and never forwards it', async () => {
+  await withTempHome(async ({ home }) => {
+    stubToolsResolution(home)
+    const desktop = await withFakeTarget({ self: (port) => ({ ok: true, pid: 4242, port, runtime: 'desktop' }) }, async ({ port, seen }) => {
+      const { registered, dispose } = await mountTools({ config: { startup: { portRange: String(port) } }, port: 3600 })
+      try {
+        const def = registered.find((d) => d.name === 'instance_stop')
+        assert.ok(def, 'the stop tool registered against the fake service')
+        return { out: await def.execute({ port }), seen: [...seen] }
+      } finally {
+        dispose()
+      }
+    })
+    assert.equal(desktop.out.ok, false)
+    assert.equal(desktop.out.code, 'stop_desktop_refused')
+    assert.equal(desktop.seen.some((u) => u.includes('stop-self')), false)
+  })
+})
+
+test('the agent stop tool still stops an ordinary target', async () => {
+  await withTempHome(async ({ home }) => {
+    stubToolsResolution(home)
+    const r = await withFakeTarget({ self: (port) => ({ ok: true, pid: 7, port, runtime: 'node' }), ack: { ok: true } }, async ({ port }) => {
+      const { registered, dispose } = await mountTools({ config: { startup: { portRange: String(port) } }, port: 3600 })
+      try {
+        const def = registered.find((d) => d.name === 'instance_stop')
+        return { out: await def.execute({ port }) }
+      } finally {
+        dispose()
+      }
+    })
+    assert.equal(r.out.ok, true, 'the guard must not turn every tool stop into a refusal')
+  })
 })
 
 // ---- action=start (explicit port) ----------------------------------------
@@ -942,5 +1202,31 @@ test('an accepted stop records who asked and how the request got in', async () =
     if (savedHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = savedHome
     fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+// Instance discovery is registry-first, and the registry is read from the
+// harness home. A process whose own idea of that home disagrees with the host's
+// therefore lists every instance except the one doing the listing, so the home
+// the host names has to win over $DSH_HOME. Both homes are real directories
+// here, which is what lets the assertion say WHICH one received the heartbeat.
+test('the host accessor, not $DSH_HOME, decides where the heartbeat is written', () => {
+  const envHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-env-home-'))
+  const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-host-home-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = envHome
+  let mounted = null
+  try {
+    mounted = mount({ port: 3081, hostHome })
+    assert.ok(fs.existsSync(path.join(hostHome, 'run', 'instances', '3081.json')),
+      'the heartbeat lands under the home the host named')
+    assert.equal(fs.existsSync(path.join(envHome, 'run', 'instances', '3081.json')), false,
+      '$DSH_HOME is not consulted when the host answers for itself')
+  } finally {
+    if (mounted) mounted.dispose()
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(envHome, { recursive: true, force: true })
+    fs.rmSync(hostHome, { recursive: true, force: true })
   }
 })
