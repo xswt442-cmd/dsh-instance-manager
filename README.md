@@ -24,7 +24,7 @@ DSH Web 的实例管理器。它为本机可见的每个 dsh web 实例显示一
 - 每个实例的只读视图：stdout/stderr 日志、会话概要，以及该实例正在运行的内容。
 - 远程实例：配置 peer 后可查看远程实例及其日志与会话。
 - Agent 工具：`instance_list`、`instance_start`、`instance_stop`、`instance_logs`、`instance_sessions`。
-- 面板启动会打开一次性 token URL 以换取浏览器 cookie，Agent 工具启动保持后台无窗口。
+- web 面板中的启动会向浏览器交接一次性 token URL 以换取浏览器 cookie，Agent 工具启动与桌面端启动都保持后台无窗口（启动参数带 `--no-open`）。
 
 ## 安装
 
@@ -71,7 +71,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 - `portRange` 的第一段限定新实例可启动的端口范围，其余各段只参与实例发现。
 - 发现同时扫描心跳登记过的端口，`--port 4000` 手工启动的实例仍会出现在列表里。
 - `portRange` 任一段不可用时，整份清单回落到内置默认值。
-- 默认值包含桌面端宿主的默认端口 `19387`；桌面端宿主按注入的 boot manifest 识别，未安装本插件也在列表里，且不由本插件托管。
+- 默认值包含桌面端宿主的默认端口 `19387`；未运行本插件的桌面端宿主由该端口的探测进入列表，其行不带 `runtime`，也不由本插件托管。
 
 界面语言跟随 DSH Settings → General 的全局语言设置。本插件不单独存储语言偏好。
 
@@ -109,12 +109,12 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 
 ## 实例字段
 
-心跳文件 `<home>/run/instances/<port>.json`、`action=self` 应答与 agent 工具的行共用同一组身份字段：
+心跳文件 `<home>/run/instances/<port>.json` 记录本插件的实例身份；`action=self` 应答与 agent 工具的行带其中的 `pid`、`port`、`runtime` 等字段。
 
 - `runtime`：`desktop` 表示桌面应用自己的宿主进程，任何停止操作都跳过它；`node` 表示普通 web 实例。判据是宿主被要求运行的入口脚本，因此环境变量（`ELECTRON_RUN_AS_NODE`）只作为诊断字段：桌面端启动的 web 实例同样带该变量。
-- `launcher`：启动该实例的宿主类型，`desktop` 或 `web`；`parentPid`：发起启动的宿主 pid。两者由打过补丁的宿主注入，取不到时为 `null`。
-- 本版之前启动的宿主不写这些字段，其行按 `node` 处理，重启一次后才自我标识。
-- `name` 是列表进程自己的可执行文件名，同一份列表里每行相同，不是被列实例的身份；区分实例请用 `runtime`、`pid` 与 `version`。
+- `launcher`：启动该实例的宿主类型，`desktop` 或 `web`；`parentPid`：发起启动的宿主 pid。两者由打过补丁的宿主注入，取不到时为 `null`，只写进心跳文件，不出现在 `action=self` 应答、agent 工具行与面板里。
+- 宿主不回报 `runtime` 时，其行按 `node` 处理。
+- `name` 是列表进程自己的可执行文件名，同一份列表里每行相同，不是被列实例的身份；实例身份由 `runtime`、`pid` 与 `version` 区分。
 
 ## 安全
 

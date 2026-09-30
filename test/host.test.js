@@ -20,6 +20,7 @@ import {
   CONNECTION_UNAVAILABLE,
   resolveDshBin,
   resolveDshHome,
+  hostDshHome,
   registryDir,
   isValidRegistryEntry,
   normalizePort,
@@ -742,4 +743,28 @@ test('resolveDshHome expands a tilde prefix against the OS home', () => {
   assert.equal(resolveDshHome({ DSH_HOME: '~' }, home), path.resolve(home))
   assert.equal(resolveDshHome({ DSH_HOME: '~/elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
   assert.equal(resolveDshHome({ DSH_HOME: '~\\elsewhere' }, home), path.resolve(path.join(home, 'elsewhere')))
+})
+
+// The registry lists every instance under one home, so an instance whose home
+// disagrees with the harness lists everything except the host doing the
+// listing. The boot layer's own accessor is that answer whenever it exists.
+test('hostDshHome prefers the host accessor and falls back without one', () => {
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = '/srv/from-env'
+  try {
+    let calls = 0
+    const accessor = () => { calls += 1; return '/srv/from-host' }
+    const hosted = { get: (name) => (name === 'dshHomePath' ? accessor : undefined) }
+    assert.equal(hostDshHome(hosted), '/srv/from-host')
+    assert.equal(calls, 1)
+
+    // A context that offers no accessor, or offers something that is not one,
+    // never has its value read as a home.
+    for (const ctx of [{}, { get: () => undefined }, { get: () => '/srv/not-a-function' }]) {
+      assert.equal(hostDshHome(ctx), path.resolve('/srv/from-env'))
+    }
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+  }
 })

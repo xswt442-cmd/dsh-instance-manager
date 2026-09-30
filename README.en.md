@@ -24,7 +24,7 @@ The entry point is the menu icon at the bottom-left of the work area, right of t
 - Read-only views per instance: stdout/stderr logs, session summaries, and what the instance is serving.
 - Remote instances: with a peer configured, view remote instances, their logs, and their sessions.
 - Agent tools: `instance_list`, `instance_start`, `instance_stop`, `instance_logs`, `instance_sessions`.
-- A web-panel start opens the one-time token URL so the new instance can issue its browser cookie, and an agent-tool start remains headless.
+- A start from the web panel hands the one-time token URL off to a browser so the new instance can issue its browser cookie; an agent-tool start and a start from the desktop stay headless (`--no-open` is passed on).
 
 ## Install
 
@@ -71,7 +71,7 @@ Which source is read depends on the host version:
 - The first `portRange` range bounds where a new instance may start, and every remaining range bounds what discovery sweeps.
 - Discovery also sweeps the heartbeat-known ports, so an instance launched by hand with `--port 4000` still appears in the list.
 - One unusable `portRange` part sends the whole list back to the built-in default.
-- The default adds `19387`, the port the desktop host takes by default; a desktop host is identified by the injected boot manifest, is listed even without this plugin, and is not managed by this plugin.
+- The default adds `19387`, the port the desktop host takes by default; a desktop host that does not run this plugin reaches the list through a probe of that port, its row carries no `runtime`, and this plugin does not manage it.
 
 The UI language follows the global DSH Settings → General language. The plugin stores no separate language preference.
 
@@ -109,12 +109,12 @@ The value of `DSHIM_FLEET_TOKEN_REF` is the name of the environment variable hol
 
 ## Instance fields
 
-The heartbeat file `<home>/run/instances/<port>.json`, the `action=self` reply and the agent tool rows share one set of identity fields:
+The heartbeat file `<home>/run/instances/<port>.json` records this plugin's instance identity; the `action=self` reply and the agent tool rows carry its `pid`, `port`, `runtime` and other fields.
 
 - `runtime`: `desktop` marks the desktop app's own host process, which every stop operation skips, and `node` marks an ordinary web instance. The criterion is the entry script the host was asked to run, so the environment flag (`ELECTRON_RUN_AS_NODE`) is a diagnostic field only: a web instance started from the desktop carries it too.
-- `launcher`: the host kind that started this instance, `desktop` or `web`, and `parentPid`: the pid of the host that spawned it. A patched host injects both, and they are `null` when unavailable.
-- A host started before this version writes none of these fields and its row is read as `node`, identifying itself only after one restart.
-- `name` is the listing process's own executable name, identical on every row of one listing and never the listed instance's identity; tell instances apart by `runtime`, `pid` and `version`.
+- `launcher`: the host kind that started this instance, `desktop` or `web`, and `parentPid`: the pid of the host that spawned it. A patched host injects both, and they are `null` when unavailable; they are written into the heartbeat file only and appear in no `action=self` reply, agent tool row or panel row.
+- A host that reports no `runtime` is read as `node`.
+- `name` is the listing process's own executable name, identical on every row of one listing and never the listed instance's identity; the instance identity is read from `runtime`, `pid` and `version`.
 
 ## Security
 

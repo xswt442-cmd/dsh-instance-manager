@@ -24,7 +24,7 @@ const LINK_PATH = '/dsh-instance-manager/link'
 // `config` is what the profile entry hands to apply() as the second argument
 // (0.1.7-rc.1 and later); leaving it undefined reproduces the older lines,
 // where the settings service is the only source of these values.
-const mount = ({ upgradeSupport = true, connection, config, port, tools } = {}) => {
+const mount = ({ upgradeSupport = true, connection, config, port, tools, hostHome } = {}) => {
   const routes = []
   const upgrades = []
   const getCalls = []
@@ -54,6 +54,9 @@ const mount = ({ upgradeSupport = true, connection, config, port, tools } = {}) 
       // Opt-in only: without one, the agent-tool row stays unmounted and the
       // service-lookup counts the tests below pin keep their old shape.
       if (name === 'tools') return tools
+      // Only the mount that needs the boot layer's home accessor supplies one;
+      // without one the plugin falls back to resolveDshHome(process.env).
+      if (name === 'dshHomePath') return hostHome ? () => hostHome : undefined
       return undefined
     },
     effect(factory) {
@@ -1199,5 +1202,31 @@ test('an accepted stop records who asked and how the request got in', async () =
     if (savedHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = savedHome
     fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+// Instance discovery is registry-first, and the registry is read from the
+// harness home. A process whose own idea of that home disagrees with the host's
+// therefore lists every instance except the one doing the listing, so the home
+// the host names has to win over $DSH_HOME. Both homes are real directories
+// here, which is what lets the assertion say WHICH one received the heartbeat.
+test('the host accessor, not $DSH_HOME, decides where the heartbeat is written', () => {
+  const envHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-env-home-'))
+  const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-host-home-'))
+  const savedHome = process.env.DSH_HOME
+  process.env.DSH_HOME = envHome
+  let mounted = null
+  try {
+    mounted = mount({ port: 3081, hostHome })
+    assert.ok(fs.existsSync(path.join(hostHome, 'run', 'instances', '3081.json')),
+      'the heartbeat lands under the home the host named')
+    assert.equal(fs.existsSync(path.join(envHome, 'run', 'instances', '3081.json')), false,
+      '$DSH_HOME is not consulted when the host answers for itself')
+  } finally {
+    if (mounted) mounted.dispose()
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+    fs.rmSync(envHome, { recursive: true, force: true })
+    fs.rmSync(hostHome, { recursive: true, force: true })
   }
 })
