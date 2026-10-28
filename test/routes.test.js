@@ -10,9 +10,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import plugin from '../lib/index.js'
+
+// 会话工具探测读取真实 PATH：开发机上的 tmux 会让每条启动用例真的创建会话并拉起
+// 实例。默认把 PATH 指向一个空目录，启动测试因此确定性地走“没有持久化工具”的直接
+// 派生路径；需要会话路径的用例自己把假的 tmux/dsh 放进 PATH（见 withSessionTools）。
+const NO_TOOL_PATH = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-nopath-'))
+const REAL_PATH = process.env.PATH
+process.env.PATH = NO_TOOL_PATH
+test.after(() => { fs.rmSync(NO_TOOL_PATH, { recursive: true, force: true }) })
 
 const API_PATH = '/dsh-instance-manager/api'
 const EVENTS_PATH = '/dsh-instance-manager/events'
@@ -506,6 +515,139 @@ const withTempHome = async (fn) => {
   }
 }
 
+// 假的 tmux 只实现插件用到的那几条命令：`new-session` 把最后一个参数（由 sh 执行的
+// 完整命令行）挂到 nohup 下，命令自己负责把输出写进启动日志；`has-session` 与
+// `kill-session` 恒成功；`list-panes` 报一个稳定的 pane pid。
+const TMUX_STUB = `#!/bin/sh
+if [ "$1" = "new-session" ]; then
+  for last do :; done
+  nohup /bin/sh -c "$last" >/dev/null 2>&1 &
+  exit 0
+fi
+if [ "$1" = "list-panes" ]; then
+  echo 12345
+  exit 0
+fi
+exit 0
+`
+
+// 假的 dsh 只实现 web 面板探测用到的最小面：`--port` 上监听、对任意 GET 回自身报告、
+// 被 stop-self 停止；启动时把 token 打到 stdout（插件的 token 读取依赖这一行），并留下
+// pid 文件供测试善后。
+//
+// token 按进程生成，并且根路径上的 `?token=` 与真实实例一样判真伪：正确的换成 cookie
+// 后 303 到干净的 `/`，其余（包括同一端口上上一代进程的那枚）401。交接因此不能只凭
+// “日志里最后一条 token 行”成立。
+const DSH_STUB = `#!/usr/bin/env node
+const fs = require('fs')
+const http = require('http')
+const path = require('path')
+const at = process.argv.indexOf('--port')
+const port = Number(process.argv[at + 1])
+const token = 'TOKEN' + process.pid
+const server = http.createServer((req, res) => {
+  const url = String(req.url || '')
+  const asked = /^\\/\\?token=([^&]+)$/.exec(url)
+  if (asked) {
+    if (asked[1] === token) {
+      res.writeHead(303, { location: '/', 'set-cookie': 'dsh-auth-stub=1' })
+      res.end()
+    } else {
+      res.writeHead(401, { 'content-type': 'text/plain' })
+      res.end('dsh web authentication required')
+    }
+    return
+  }
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, pid: process.pid, port, runtime: 'node' }))
+  if (url.includes('action=stop-self')) {
+    setImmediate(() => server.close(() => process.exit(0)))
+  }
+})
+server.listen(port, '127.0.0.1', () => {
+  const announce = () => console.log('dsh web: http://127.0.0.1:' + port + '/?token=' + token)
+  try {
+    fs.writeFileSync(path.join(__dirname, 'fake-dsh-' + port + '.pid'), String(process.pid))
+  } catch (error) {}
+  // 真实 dsh 可能先应答 action=self、后把 token 行写进 stdout；slow-token 标记让这个
+  // 顺序在测试里确定性地出现，交接必须等 token 而不是立刻失败。
+  if (fs.existsSync(path.join(__dirname, 'slow-token'))) setTimeout(announce, 800)
+  else announce()
+})
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0))
+`
+
+const writeExecutable = (dir, name, body) => {
+  const file = path.join(dir, name)
+  fs.writeFileSync(file, body)
+  fs.chmodSync(file, 0o755)
+  return file
+}
+
+// The cases below stand a fake `dsh` / `tmux` / `screen` on PATH and expect the
+// panel to spawn it. That only works where an executable is a script with a
+// shebang and an executable bit: on Windows the npm launcher is an extensionless
+// sh shim, `chmod` is a no-op and `spawn` fails with ENOENT — which is also why
+// the plugin skips PATH entirely on win32 (see the `dshCli` platform guard). So
+// these are POSIX behaviour, not cross-platform behaviour.
+const posixOnly = process.platform === 'win32'
+  ? { skip: 'POSIX only: PATH entries are shell scripts and are not spawnable on win32' }
+  : {}
+
+// 把 tmux 与 dsh 放进 PATH 最前面，让 launchInSession 选到它们；退出时恢复 PATH、按
+// pid 文件停掉假实例并删掉目录。默认 PATH 已被模块顶部置空，所以不会碰到真 tmux。
+const withSessionTools = async (fn) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-session-'))
+  const savedPath = process.env.PATH
+  writeExecutable(dir, 'tmux', TMUX_STUB)
+  writeExecutable(dir, 'dsh', DSH_STUB)
+  // 假工具排在最前；真实 PATH 留在后面，让会话里的 `env`、`nohup` 和 node 仍可解析。
+  process.env.PATH = dir + path.delimiter + REAL_PATH
+  try {
+    return await fn({ dir })
+  } finally {
+    process.env.PATH = savedPath
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith('fake-dsh-') || !name.endsWith('.pid')) continue
+      try {
+        process.kill(Number(fs.readFileSync(path.join(dir, name), 'utf8')), 'SIGTERM')
+      } catch (error) {}
+    }
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+// 只有全局 dsh、没有会话工具时的 PATH。假 dsh 的 shebang 是 /usr/bin/env node，
+// 因此把 node 指向当前解释器；PATH 里没有真实目录，开发机上的 tmux 不会被发现。
+const withDshOnly = async (fn) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-cli-'))
+  const savedPath = process.env.PATH
+  writeExecutable(dir, 'dsh', DSH_STUB)
+  fs.symlinkSync(process.execPath, path.join(dir, 'node'))
+  process.env.PATH = dir
+  try {
+    return await fn({ dir })
+  } finally {
+    process.env.PATH = savedPath
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith('fake-dsh-') || !name.endsWith('.pid')) continue
+      try {
+        process.kill(Number(fs.readFileSync(path.join(dir, name), 'utf8')), 'SIGTERM')
+      } catch (error) {}
+    }
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const freePort = () => new Promise((resolve, reject) => {
+  const server = net.createServer()
+  server.on('error', reject)
+  server.listen(0, '127.0.0.1', () => {
+    const port = server.address().port
+    server.close(() => resolve(port))
+  })
+})
+
 // agent 工具通过第二扇门到达同一守卫，因此这里需要一个捕获定义的 services，以及可
 // 解析的 @deepseek-ai/dsh-tools：loadDefineTool 会退回 createRequire(dshBin())，这是
 // 未安装真实 harness 时唯一可用的解析路径。
@@ -703,7 +845,128 @@ test('action=restart refuses the current instance without forwarding anything', 
   assert.equal(r.status, 200)
   assert.equal(r.json.ok, false)
   assert.equal(r.json.code, 'restart_current_refused',
-    '提供面板的进程会随重启一起离开，用户看到的只会是一次失败的点击')
+    '没有持久化会话时，提供面板的进程仍然会随重启一起离开')
+})
+
+test('action=restart hands the current instance over to a persistent session, then jumps to it', posixOnly, async () => {
+  await withTempHome(async ({ home, exits }) => {
+    await withSessionTools(async ({ dir }) => {
+      fs.writeFileSync(path.join(dir, 'slow-token'), '')
+      const port = await freePort()
+      const r = await callApiFull({
+        query: 'action=restart&port=3600',
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      })
+      assert.equal(r.status, 200)
+      assert.equal(r.json.ok, true)
+      assert.equal(r.json.code, 'handoff')
+      // 替代实例必须换到新端口：同端口无法在旧进程离开前就绪。
+      assert.equal(r.json.port, port)
+      assert.equal(r.json.session.tool, 'tmux')
+      assert.match(r.json.session.name, /^dshim-/)
+      // 跳转目标带替代实例自己的启动 token（假 dsh 按进程生成），浏览器落到那里时
+      // 不必再登录一次。
+      assert.match(r.json.url, new RegExp('^http://127\\.0\\.0\\.1:' + port + '/\\?token=TOKEN\\d+$'))
+      assert.equal(r.json.bin, path.join(dir, 'dsh'),
+        '没有 profile 启动器时，会话里执行的是 PATH 上的 dsh web')
+      // 取代者就绪后旧进程必须退出，否则面板会一直留在旧端口上。
+      assert.deepEqual(exits, [0])
+      assert.match(fs.readFileSync(path.join(home, 'launcher', 'logs', 'server-' + port + '.out.log'), 'utf8'),
+        /dsh web:/, '替代实例的启动输出落在按端口命名的日志里')
+    })
+  })
+})
+
+test('action=restart ignores a token the previous process on that port left in the log', posixOnly, async () => {
+  await withTempHome(async ({ home, exits }) => {
+    await withSessionTools(async ({ dir }) => {
+      // 替代实例先应答 action=self、后写 token 行：交接发生在只有旧行的那一刻。
+      fs.writeFileSync(path.join(dir, 'slow-token'), '')
+      const port = await freePort()
+      // 启动日志按端口命名且是追加的：这个端口上一代实例的 token 行仍在文件里，重启
+      // 复用同一端口后它排在新行之前。它格式完全合法，却是上一代进程的，浏览器带着
+      // 它过去只会落到 401。
+      const logDir = path.join(home, 'launcher', 'logs')
+      fs.mkdirSync(logDir, { recursive: true })
+      fs.writeFileSync(path.join(logDir, 'server-' + port + '.out.log'),
+        'dsh web: http://127.0.0.1:' + port + '/?token=STALETOKEN\n')
+      const r = await callApiFull({
+        query: 'action=restart&port=3600',
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      })
+      assert.equal(r.status, 200)
+      assert.equal(r.json.code, 'handoff')
+      assert.doesNotMatch(r.json.url, /STALETOKEN/,
+        '上一代进程的 token 不能交给浏览器：它已被替代实例以 401 拒绝')
+      assert.match(r.json.url, /token=TOKEN\d+$/)
+      assert.deepEqual(exits, [0], '交接成功时旧进程照常退出')
+    })
+  })
+})
+
+test('action=start runs dsh web inside the session tool when no profile launcher exists', posixOnly, async () => {
+  await withTempHome(async ({ home }) => {
+    await withSessionTools(async ({ dir }) => {
+      const port = await freePort()
+      const r = await callApiFull({
+        query: 'action=start&port=' + port,
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      })
+      assert.equal(r.status, 200)
+      assert.equal(r.json.ok, true)
+      assert.equal(r.json.port, port)
+      assert.equal(r.json.bin, path.join(dir, 'dsh'))
+      assert.equal(r.json.session.tool, 'tmux')
+      assert.equal(r.json.pid, 12345, 'tmux 会话里取到的 pane pid')
+      assert.match(fs.readFileSync(path.join(home, 'launcher', 'logs', 'server-' + port + '.out.log'), 'utf8'),
+        /dsh web:/)
+    })
+  })
+})
+
+test('action=start falls back to the dsh on PATH when there is no session tool', posixOnly, async () => {
+  await withTempHome(async ({ home }) => {
+    await withDshOnly(async ({ dir }) => {
+      const port = await freePort()
+      const r = await callApiFull({
+        query: 'action=start&port=' + port,
+        method: 'POST',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: String(port) } },
+        port: 3600
+      })
+      assert.equal(r.status, 200)
+      assert.equal(r.json.ok, true)
+      assert.equal(r.json.port, port)
+      assert.equal(r.json.bin, path.join(dir, 'dsh'))
+      assert.equal(r.json.session, undefined, '没有会话工具时仍是直接派生')
+      assert.match(fs.readFileSync(path.join(home, 'launcher', 'logs', 'server-' + port + '.out.log'), 'utf8'),
+        /dsh web:/)
+    })
+  })
+})
+
+test('action=list advertises the session tool panel launches will use', async () => {
+  await withTempHome(async () => {
+    await withSessionTools(async () => {
+      const r = await callApiFull({
+        query: 'action=list',
+        remoteAddress: '127.0.0.1',
+        config: { startup: { portRange: '65530' } },
+        port: 3600
+      })
+      assert.equal(r.json.selfSession, 'tmux')
+    })
+  })
 })
 
 test('action=restart refuses a desktop target without forwarding anything', async () => {

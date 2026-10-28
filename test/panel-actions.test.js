@@ -64,7 +64,7 @@ const componentSource = (source, name) => {
   throw new Error('unbalanced braces for ' + name)
 }
 
-const mountPanel = ({ fetchImpl }) => {
+const mountPanel = ({ fetchImpl, location }) => {
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
   // 在 launcher 自己的渲染过程中重新赋值：React 的 hook 按组件实例区分，而本驱动
   // 用一个计数器按调用序号索引它们。
@@ -125,7 +125,14 @@ const mountPanel = ({ fetchImpl }) => {
       addEventListener() {},
       removeEventListener() {}
     },
-    window: { addEventListener() {}, removeEventListener() {}, __ModuleLoader__: { load(value) { definition = value } } }
+    window: {
+      addEventListener() {},
+      removeEventListener() {},
+      // 交接成功后客户端整页跳转到替代实例；默认吞掉，需要断言的用例传入自己的
+      // location.replace。
+      location: location || { replace() {} },
+      __ModuleLoader__: { load(value) { definition = value } }
+    }
   }
   context.globalThis = context
 
@@ -488,7 +495,7 @@ test('the session row shows the folded title and lineage instead of a bare short
   assert.match(textOf(legacy.renderTree()), /abcdef01/)
 })
 
-test('the restart button refuses the current instance, and says why', async () => {
+test('the restart button stays disabled on the current instance when no session tool is available', async () => {
   const current = {
     ok: true,
     selfVersion: '0.9.10',
@@ -503,8 +510,56 @@ test('the restart button refuses the current instance, and says why', async () =
   await panel.flush()
   const restart = buttonByText(panel.renderTree(), /^Restart$/)
   assert.ok(restart)
-  assert.equal(restart.props.disabled, true, '重启当前实例会带走正在服务面板的进程')
-  assert.match(restart.props.title, /never restarted from this panel/)
+  assert.equal(restart.props.disabled, true, '没有可托管的会话时，重启仍会带走正在服务面板的进程')
+  assert.match(restart.props.title, /no tmux or screen/)
   // 停止仍然可用：这两道关卡各自拒绝各自的动作。
   assert.equal(buttonByText(panel.renderTree(), /Stop current/).props.disabled, false)
+})
+
+test('the current instance restarts by handing off to a session and navigating to the replacement', async () => {
+  const current = {
+    ok: true,
+    selfVersion: '0.9.10',
+    selfSession: 'tmux',
+    items: [{ port: 3080, managed: true, current: true, ui: true, pid: 1, startedAt: 0 }]
+  }
+  const calls = []
+  const navigations = []
+  const panel = mountPanel({
+    location: { replace: (url) => navigations.push(url) },
+    fetchImpl: async (url) => {
+      calls.push(String(url))
+      const query = String(url).split('?')[1] || ''
+      if (/action=list/.test(query)) return { json: async () => current }
+      return {
+        json: async () => ({
+          ok: true,
+          code: 'handoff',
+          port: 3081,
+          session: { tool: 'tmux', name: 'dshim-3081' },
+          url: 'http://127.0.0.1:3081/?token=TESTTOKEN'
+        })
+      }
+    }
+  })
+  await panel.flush()
+  const restart = buttonByText(panel.renderTree(), /^Restart$/)
+  assert.ok(restart, 'a detected session tool makes the current instance restartable')
+  assert.equal(restart.props.disabled, false)
+  assert.match(restart.props.title, /tmux\/screen/)
+
+  restart.props.onClick({ stopPropagation() {} })
+  await panel.flush()
+  const armed = buttonByText(panel.renderTree(), /Confirm restart/)
+  assert.ok(armed, 'handoff still asks for confirmation first')
+  armed.props.onClick({ stopPropagation() {} })
+  await panel.flush()
+
+  const restartCalls = calls.filter((u) => /action=restart/.test(u))
+  assert.equal(restartCalls.length, 1)
+  assert.match(restartCalls[0], /port=3080/)
+  // 交接成功不是"刷新当前页面"：旧进程即将退出，页面必须直接落到替代实例上。
+  assert.deepEqual(navigations, ['http://127.0.0.1:3081/?token=TESTTOKEN'])
+  assert.equal(calls.filter((u) => /action=list/.test(u)).length, 1,
+    '跳转后不再刷新旧实例的列表')
 })
