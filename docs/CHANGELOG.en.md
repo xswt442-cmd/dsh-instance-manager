@@ -12,8 +12,10 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Fixed
 
-- The launcher may come from `dsh` on `PATH`, fixing "dsh launcher not found" on machines that only have the global install.
+- The launcher may come from `dsh` on `PATH` (POSIX only: on Windows that entry is an extensionless sh shim and cannot be spawned, so `dshBin()` plus node is still used), fixing "dsh launcher not found" on machines that only have the global install.
 - Handoff accepts only the launch token the replacement wrote after its own start, and confirms it exchanges for a cookie before the browser is sent there, so the token a previous process left on that port is never handed over.
+
+Thanks to [@Jimmy32767255](https://github.com/Jimmy32767255) for the session handoff and launch work.
 
 ## 0.12.0 - 2026-10-19
 
