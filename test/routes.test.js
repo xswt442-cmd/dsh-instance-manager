@@ -584,6 +584,16 @@ const writeExecutable = (dir, name, body) => {
   return file
 }
 
+// The cases below stand a fake `dsh` / `tmux` / `screen` on PATH and expect the
+// panel to spawn it. That only works where an executable is a script with a
+// shebang and an executable bit: on Windows the npm launcher is an extensionless
+// sh shim, `chmod` is a no-op and `spawn` fails with ENOENT — which is also why
+// the plugin skips PATH entirely on win32 (see the `dshCli` platform guard). So
+// these are POSIX behaviour, not cross-platform behaviour.
+const posixOnly = process.platform === 'win32'
+  ? { skip: 'POSIX only: PATH entries are shell scripts and are not spawnable on win32' }
+  : {}
+
 // 把 tmux 与 dsh 放进 PATH 最前面，让 launchInSession 选到它们；退出时恢复 PATH、按
 // pid 文件停掉假实例并删掉目录。默认 PATH 已被模块顶部置空，所以不会碰到真 tmux。
 const withSessionTools = async (fn) => {
@@ -838,7 +848,7 @@ test('action=restart refuses the current instance without forwarding anything', 
     '没有持久化会话时，提供面板的进程仍然会随重启一起离开')
 })
 
-test('action=restart hands the current instance over to a persistent session, then jumps to it', async () => {
+test('action=restart hands the current instance over to a persistent session, then jumps to it', posixOnly, async () => {
   await withTempHome(async ({ home, exits }) => {
     await withSessionTools(async ({ dir }) => {
       fs.writeFileSync(path.join(dir, 'slow-token'), '')
@@ -870,7 +880,7 @@ test('action=restart hands the current instance over to a persistent session, th
   })
 })
 
-test('action=restart ignores a token the previous process on that port left in the log', async () => {
+test('action=restart ignores a token the previous process on that port left in the log', posixOnly, async () => {
   await withTempHome(async ({ home, exits }) => {
     await withSessionTools(async ({ dir }) => {
       // 替代实例先应答 action=self、后写 token 行：交接发生在只有旧行的那一刻。
@@ -900,7 +910,7 @@ test('action=restart ignores a token the previous process on that port left in t
   })
 })
 
-test('action=start runs dsh web inside the session tool when no profile launcher exists', async () => {
+test('action=start runs dsh web inside the session tool when no profile launcher exists', posixOnly, async () => {
   await withTempHome(async ({ home }) => {
     await withSessionTools(async ({ dir }) => {
       const port = await freePort()
@@ -923,7 +933,7 @@ test('action=start runs dsh web inside the session tool when no profile launcher
   })
 })
 
-test('action=start falls back to the dsh on PATH when there is no session tool', async () => {
+test('action=start falls back to the dsh on PATH when there is no session tool', posixOnly, async () => {
   await withTempHome(async ({ home }) => {
     await withDshOnly(async ({ dir }) => {
       const port = await freePort()
