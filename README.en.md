@@ -18,10 +18,11 @@ The entry point is the menu icon at the bottom-left of the work area, right of t
 ## Features
 
 - One row per instance: port, PID, uptime, session count, resident memory and version; the current instance sorts first and the rest follow by ascending port.
-- Start a new instance: an empty port takes the first free port of the start range, and a named port already in use is reported instead of moving to another port.
+- Start a new instance: an empty port takes the first free port of the start range, and a named port already in use is reported instead of moving to another port. When tmux or screen is detected, the start runs `dsh web` inside a persistent session, so the instance does not leave with the panel host.
 - Open an instance: a row's `:port` navigates to that instance's UI, and the launch token is read by the host at that moment, so it enters neither the panel state nor the link.
 - Stop one, the current, or all local instances; remote rows are read-only and never part of stop-all.
-- Restart in place: restart a local instance **on the same port** without a manual stop + start.
+- Restart in place: restart another local instance **on the same port** without a manual stop + start.
+- Restart the current instance: when tmux or screen is detected, a replacement starts on a new port, the browser is sent to its token URL once it is ready, and the old instance exits afterwards.
 - Read-only views per instance: stdout/stderr logs, session summaries (time, folded title or short id, working directory, subagent flag, preset, delegation depth, event count), what the instance is serving, and its diagnostic records (crash black box, self-exit log, mutation trace).
 - Remote instances: with a peer configured, view remote instances, their logs, and their sessions.
 - Agent tools: `instance_list`, `instance_start`, `instance_stop`, `instance_restart`, `instance_logs`, `instance_sessions`.
@@ -155,14 +156,15 @@ Every session summary row is a pure scalar projection; the host's live session o
 - `cwd`, `subagent`, `events`: working directory, subagent flag and event count.
 - All of these are optional. On a mixed-version fleet an older instance's reply carries none of them, and this plugin's output schema is closed, so the projection adopts each by type and omits what is missing rather than writing `null`.
 
-## Restart in place
+## Restart and handoff
 
-An instance row's Restart button and the `instance_restart` agent tool restart a local instance **on the same port**, replacing a manual stop + start. The steps are fixed: forward the stop (the target exits gracefully through its own `appExit`, so sessions persist) → poll until the port is genuinely released → launch on that port → wait for it to answer `action=self`.
+An instance row's Restart button and the `instance_restart` agent tool restart a local instance. When the target is not the current instance, the steps are fixed: forward the stop (the target exits gracefully through its own `appExit`, so sessions persist) → poll until the port is genuinely released → launch on that port → wait for it to answer `action=self`.
 
-- **The port is empty between the stop and the start.** A process that grabs it inside that window fails the restart with `port_in_use`; a port still taken after 15 seconds answers `port_still_in_use`. Neither case starts anywhere else — the point is a restart on the original port, and a different port is a different instance.
-- The current instance is never restarted: the process serving the panel leaves with the restart, and the browser would only see a failed click. Restart your local dsh instead.
-- The desktop host is never restarted, for the same reasons as stopping it.
-- Remote rows are not restartable.
+- **The current instance is handed off.** When tmux or screen is detected, a replacement starts on a free port of the start range inside that session; once it answers `action=self`, the panel returns its absolute token URL and the browser navigates there, after which the old process exits. The token is the one that replacement wrote after starting, and a loopback request confirms it exchanges for a cookie before it is handed over; the host name is the one the browser used for the panel. The old instance serves the panel until the replacement is ready, so there is no empty-port window.
+- Panel starts and restarts run `dsh web` inside tmux (then screen) when available, so an instance no longer leaves with the panel host; without either tool the launch falls back to a direct spawn.
+- The launcher comes from `dsh` on `PATH` first, then the dsh entry in the profile; only when neither exists does the host answer `no_dsh_bin`.
+- In-place restarts of other instances stay on their original port: the port is empty between the stop and the start, a process that grabs it fails the restart with `port_in_use`, and a port still taken after 15 seconds answers `port_still_in_use`. Neither case moves elsewhere.
+- Without tmux or screen the current instance is still refused; the desktop host and remote rows are never restartable.
 - A panel-triggered restart hands the launch token off to the browser, so the fresh instance opens directly; an agent-tool restart stays headless (`--no-open` is passed on).
 
 ## Development

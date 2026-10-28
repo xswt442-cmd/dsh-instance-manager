@@ -3,6 +3,18 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.13.0 - 2026-10-27
+
+### Added
+
+- Panel starts and restarts run `dsh web` inside a persistent session when tmux or screen is detected, so an instance no longer leaves with the panel host; without a session tool the launch stays a direct spawn.
+- Restarting the current instance is now a handoff: a replacement starts on a new port inside the session, the browser is sent to its token URL once it is ready, and the old process exits afterwards; without a session tool it is still refused.
+
+### Fixed
+
+- The launcher may come from `dsh` on `PATH`, fixing "dsh launcher not found" on machines that only have the global install.
+- Handoff accepts only the launch token the replacement wrote after its own start, and confirms it exchanges for a cookie before the browser is sent there, so the token a previous process left on that port is never handed over.
+
 ## 0.12.0 - 2026-10-19
 
 ### Added
