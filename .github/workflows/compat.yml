@@ -90,7 +90,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # The supported floor is 0.2.0-rc.1 and the newest anchor is 0.2.1-rc.2.
+        # The supported floor is 0.2.0-rc.1 and the newest anchor is 0.2.1-rc.5.
         # Nothing below 0.2.0-rc.1 is in this matrix, and nothing below it is
         # declared either: `engines.dsh` and the `@deepseek-ai/dsh` peer both say
         # `>=0.2.0-rc.1`, so the manifest and this job state one floor rather
@@ -110,7 +110,8 @@ jobs:
         # 0.2.0-rc.1 kept the plugin-facing APIs this plugin reads unchanged from
         # the 0.1.7 line, which is why it can carry the floor.
         #
-        # 0.2.1-rc.2 is the newest anchor. It adds TLS and a `getOrigin()` to
+        # 0.2.1-rc.5 is the newest anchor. Since the floor it adds TLS and a
+        # `getOrigin()` to
         # the webserver, adds the /connect route and v2 API cookies to the
         # Connection carrier, and makes the plugin preflight read `engines.dsh`
         # before peerDependencies when both are present. None of these touch the
@@ -119,7 +120,7 @@ jobs:
         # `locale`, `slots`, `credentials.resolve`, `dshHomePath`, `appExit` —
         # and the plugin's own `engines.dsh` and `@deepseek-ai/dsh` peer carry
         # the same range, so the preflight's order change is neutral.
-        dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.2']
+        dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.5']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
