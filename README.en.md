@@ -51,11 +51,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 - `live`: refresh interval, fleet token, peer list; the host watches this section and a change there takes effect immediately.
 - `startup`: the managed port range; that section is `applies: 'restart'`, the host reads it once at construction, and the settings UI marks a not-yet-applied edit as pending.
 
-Which source is read depends on the host version:
-
-- DSH 0.1.7-rc.1 and later: both sections come from the profile entry's own `config`, and that version's settings service no longer exposes `register`; editing the entry config restarts this plugin, while `live` changes still apply immediately.
-- Earlier releases: the two sections are the namespaces the settings service registers, `dsh-instance-manager` (`live`) and `dsh-instance-manager-startup` (`startup`); `live` applies through its watch, and the same names written into an entry config are not read.
-- On a host that offers both, the settings service carries the reads, and a value written to the other source has no effect and reports no error.
+Both sections come from the profile entry's own `config`: editing the entry config restarts this plugin, while `live` changes still apply immediately.
 
 ### Fields and value ranges
 

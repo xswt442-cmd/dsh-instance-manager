@@ -51,11 +51,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 - `live`：刷新间隔、Fleet token、peer 列表；宿主 watch 该节，修改即时生效。
 - `startup`：端口清单；该节 `applies: 'restart'`，宿主仅在构造时读取一次，未生效的修改在设置界面标为待生效。
 
-读取的来源由宿主版本决定：
-
-- DSH 0.1.7-rc.1 及之后：两节来自 profile 条目自身的 `config`，该版本的设置服务不再提供 `register`；改条目 config 会重启本插件，`live` 一节的改动仍立即生效。
-- 更早的版本：两节来自设置服务注册的两个命名空间 `dsh-instance-manager`（`live`）与 `dsh-instance-manager-startup`（`startup`）；`live` 通过 watch 生效，写入条目 config 的同名字段不会被读取。
-- 两个来源同时存在时由设置服务承担读取，配在另一处的值不生效，也不报错。
+来源是 profile 条目自身的 `config`：改条目 config 会重启本插件，`live` 一节的改动仍立即生效。
 
 ### 字段与取值范围
 
