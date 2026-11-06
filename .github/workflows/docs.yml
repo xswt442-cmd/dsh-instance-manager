@@ -1,9 +1,13 @@
 name: docs
 
 on:
-  pull_request:
   push:
     branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,36 +15,10 @@ permissions:
 jobs:
   bilingual:
     runs-on: ubuntu-latest
-    env:
-      DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # docs:check is a bin of the pinned dsh-mini-utility-dock dependency, so
-      # this job needs node_modules like every other workflow now. `npm install`
-      # rather than `npm ci`, and no `cache: npm`: both take their input from a
-      # lockfile, and this repository tracks none on purpose (see .gitignore).
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run docs:check
-      # `github.event.before` names the commit this push replaced, and a force
-      # push (amended history) leaves that object unreachable, so `git diff
-      # <base> HEAD` inside docs:check dies with "bad object" — a red job that
-      # says nothing about the docs. Fall back to the parent commit, and skip the
-      # paired-edit check entirely when there is no usable base (first push).
-      - name: resolve the docs base
-        id: base
-        run: |
-          base="$DOCS_BASE"
-          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "::warning::DOCS_BASE $base is unreachable (force push?); falling back to HEAD^"
-            base="$(git rev-parse HEAD^ 2>/dev/null || echo '')"
-          fi
-          echo "base=$base" >> "$GITHUB_OUTPUT"
-      - name: require paired edits
-        if: steps.base.outputs.base != ''
-        run: npm run docs:check -- --base "${{ steps.base.outputs.base }}"
-

@@ -1,20 +1,34 @@
-# Engineering Standards · 工程化规范
+# Engineering conventions
 
-此目录是从维护者的工程规范仓库同步的**项目内规范快照**；用于本仓库独立审阅和验证，不代替实际代码、项目 AGENTS 或 CI。
+This directory holds one index. Every kind of information has a single home; do not copy it elsewhere.
 
-## 内容导航
+## Documents
 
-- [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)：公开仓库内容准入、文档归属、版本发行与 Agent 约束。
-- [ADOPTION.md](ADOPTION.md)：现有项目接入、验证与后续同步检查。
-- [templates/AGENTS.md](templates/AGENTS.md)：仅英文的可移植 Agent 规则模板；必须按项目真实边界调整。
-- [templates/CLAUDE.md](templates/CLAUDE.md)：Claude 兼容入口。
-- [templates/CHANGELOG.md](templates/CHANGELOG.md)：按「新增 / 改进 / 修复」的中英双语 Changelog 样例。
-- [templates/RELEASE.md](templates/RELEASE.md)：通用发行及回滚操作说明。
-- [scripts/release-notes.mjs](scripts/release-notes.mjs)：从目标版本 Changelog 提取发行说明的无依赖脚本。
-- [tests/](tests/)：脚本自动化测试。
+| What | Where |
+| --- | --- |
+| Project entry | `README.md` / `README.en.md` |
+| Version changes | `docs/CHANGELOG.md` / `docs/CHANGELOG.en.md` |
+| Release procedure | `docs/RELEASING.md` |
+| Agent constraints | `AGENTS.md`; `CLAUDE.md` is its entry point |
+| Engineering conventions | this file |
 
-## 权责划分
+- Both changelogs keep the same sections, bullet count, and order; `npm run docs:check` compares the pairs declared in this repository.
+- GitHub release notes are extracted verbatim from the matching `docs/CHANGELOG.md` section by `scripts/release-notes.mjs`. Do not maintain a second copy.
+- Tracked documents describe shipped behavior only: no personal paths, machine state, implementation logs, or future plans.
 
-1. **维护者的工程规范仓库**维护通用原则与模板；本目录是独立可读的项目副本，调整后需经过项目审核。
-2. **项目仓库**的 `AGENTS.md`、CHANGELOG、CI 和发行手册必须在本仓库内可独立阅读和执行；项目实现与经验证的现实情况优先于泛用样例。
-3. **变更传播是显式的。** 修改本目录不自动改变产品仓库；同步后各项目独立审查、测试和提交。严禁直接修改历史 Tag 或二进制发行资产。
+## Branches and commits
+
+- Commit straight to `dev` and fast-forward `main` before a release. This repository has no PR flow.
+- Use English conventional commit messages.
+- Keep `package.json#version`, the code version constant (where present), both changelogs, and the `vX.Y.Z` tag in step. Tag only a commit on `main`; `publish.yml` rejects any other ancestry.
+
+## Actions
+
+- `ci` / `compat` / `docs` run on pushes to `main` and `dev`, on `workflow_dispatch`, and (compat) on the nightly schedule. `publish` runs only on a `v*` tag.
+- No `pull_request` triggers, PR templates, paired-edit gates, or review bots.
+- Every workflow sets `permissions: contents: read` at the top; only the job that creates the GitHub release declares write access. CI workflows cancel superseded runs per ref; publishes queue and are never cancelled.
+- `actions/checkout` and `actions/setup-node` use the same pinned versions across the workflows.
+
+## Checks
+
+See the Verify section of `AGENTS.md` before a commit, and `docs/RELEASING.md` before a release.

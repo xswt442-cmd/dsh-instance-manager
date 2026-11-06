@@ -1,16 +1,11 @@
 name: compat
 
 on:
-  # The gate has to run where a change can still be acted on. With only push and
-  # schedule here, the first signal a branch sent was the merge commit turning
-  # `main` red, and a pull request could land having never been tested at all —
-  # the docs job was the only check a PR saw.
-  pull_request:
+  push:
+    branches: [main, dev]
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
-  push:
-    branches: [main, dev]
 
 # One run per branch: a burst of commits cancels the superseded runs instead
 # of queueing a full boot-check behind each of them.
