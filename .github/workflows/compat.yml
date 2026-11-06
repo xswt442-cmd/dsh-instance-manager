@@ -3,6 +3,8 @@ name: compat
 on:
   push:
     branches: [main, dev]
+  # Outside contributions arrive as pull requests; run the same gate before review.
+  pull_request:
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:

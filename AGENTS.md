@@ -21,7 +21,7 @@
 
 ## Releases
 
-Commit straight to `dev` and fast-forward `main`; there is no PR flow. `docs/RELEASING.md` is the runbook; `scripts/release-notes.mjs` cuts release notes from `docs/CHANGELOG.md`.
+Maintainers commit straight to `dev` and fast-forward `main`; CI still runs when an outside pull request arrives. `docs/RELEASING.md` is the runbook; `scripts/release-notes.mjs` cuts release notes from `docs/CHANGELOG.md`.
 
 ## Verify
 

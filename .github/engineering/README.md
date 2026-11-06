@@ -18,14 +18,14 @@ This directory holds one index. Every kind of information has a single home; do 
 
 ## Branches and commits
 
-- Commit straight to `dev` and fast-forward `main` before a release. This repository has no PR flow.
+- Maintainers commit straight to `dev` and fast-forward `main` before a release; outside contributions arrive as pull requests and run the same CI.
 - Use English conventional commit messages.
 - Keep `package.json#version`, the code version constant (where present), both changelogs, and the `vX.Y.Z` tag in step. Tag only a commit on `main`; `publish.yml` rejects any other ancestry.
 
 ## Actions
 
-- `ci` / `compat` / `docs` run on pushes to `main` and `dev`, on `workflow_dispatch`, and (compat) on the nightly schedule. `publish` runs only on a `v*` tag.
-- No `pull_request` triggers, PR templates, paired-edit gates, or review bots.
+- `ci` / `compat` / `docs` run on pushes to `main` and `dev`, on `pull_request`, on `workflow_dispatch`, and (compat) on the nightly schedule. `publish` runs only on a `v*` tag.
+- CI runs on `pull_request` so outside contributions are tested; there are no PR templates, paired-edit gates, or review bots.
 - Every workflow sets `permissions: contents: read` at the top; only the job that creates the GitHub release declares write access. CI workflows cancel superseded runs per ref; publishes queue and are never cancelled.
 - `actions/checkout` and `actions/setup-node` use the same pinned versions across the workflows.
 
