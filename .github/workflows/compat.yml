@@ -83,21 +83,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # The supported floor is 0.2.0-rc.1 and the newest anchor is 0.2.1-rc.5.
+        # The supported floor is 0.2.0-rc.1 and the newest anchor is 0.2.2-rc.1.
         # Nothing below 0.2.0-rc.1 is in this matrix, and nothing below it is
         # declared either: `engines.dsh` and the `@deepseek-ai/dsh` peer both say
         # `>=0.2.0-rc.1`, so the manifest and this job state one floor rather
         # than a promise nobody executes.
         #
-        # 0.2.1-rc.5 adds TLS and `getOrigin()` to the webserver, the /connect
-        # route and v2 API cookies to the Connection carrier, and makes the plugin
-        # preflight read `engines.dsh` before peerDependencies. None of these touch
-        # the surface this plugin reads — `webServer.register`/`registerUpgrade`/`port`,
+        # 0.2.2-rc.1 changes client plugin APIs — context-menu target names, CSS
+        # anchored menus, `ProcessActivity.context` — and subagent tool argument
+        # names. None of these touch the surface this plugin reads —
+        # `webServer.register`/`registerUpgrade`/`port`,
         # `connection.requestRejection`, `tools.register`, `sessions.list`,
         # `locale`, `slots`, `credentials.resolve`, `dshHomePath`, `appExit` — and
         # the plugin's own `engines.dsh` and `@deepseek-ai/dsh` peer carry the same
         # range.
-        dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.5']
+        dsh-spec: ['@0.2.0-rc.1', '@0.2.2-rc.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
