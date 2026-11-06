@@ -57,8 +57,8 @@ test('VERSION constant stays in lockstep with package.json', () => {
 })
 
 test('RC1 launch args split browser token handoff from headless agent starts', () => {
-  const ui = buildDshLaunchArgs('C:/dsh/lib/bin.js', 3090, { browserHandoff: true })
-  const agent = buildDshLaunchArgs('C:/dsh/lib/bin.js', 3090)
+  const ui = buildDshLaunchArgs('/opt/dsh/lib/bin.js', 3090, { browserHandoff: true })
+  const agent = buildDshLaunchArgs('/opt/dsh/lib/bin.js', 3090)
   assert.deepEqual(ui.slice(-4), ['--profile', 'web', '--port', '3090'])
   assert.equal(ui.includes('--no-open'), false, 'browser start must open the one-time token URL')
   assert.equal(agent.includes('--no-open'), true, 'agent start must remain headless')
@@ -69,9 +69,9 @@ test('detectRuntime recognises the desktop host by its entry script', () => {
   // 桌面应用自己的宿主：同一个可执行文件，运行从 app.asar 解包的 desktop-host
   // 入口。
   assert.equal(detectRuntime([
-    'E:\\DSH\\DeepSeek Harness.exe',
+    '/opt/dsh/DeepSeek Harness.exe',
     '--expose-internals',
-    'E:\\DSH\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\index.js'
+    '/opt/dsh/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js'
   ]), 'desktop')
   assert.equal(detectRuntime(['/opt/DSH/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js']), 'desktop')
   assert.equal(detectRuntime(['node', '/opt/dsh/lib/index.js', '--dsh-desktop-host-marker']), 'desktop', 'any argv element may carry the marker')
@@ -82,10 +82,10 @@ test('an Electron-launched web instance stays node, not desktop', () => {
   // ELECTRON_RUN_AS_NODE=1。该环境标记因此只上报、从不参与判定——把它当成
   // “desktop”会让普通 web 实例无法被停止。
   const argv = [
-    'E:\\DSH\\DeepSeek Harness.exe',
+    '/opt/dsh/DeepSeek Harness.exe',
     '--trace-exit',
     '--unhandled-rejections=strict',
-    'C:\\Users\\x\\.dsh\\profiles\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js'
+    '/home/x/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js'
   ]
   assert.equal(detectRuntime(argv), 'node')
   assert.equal(isElectronNode({ ELECTRON_RUN_AS_NODE: '1' }, {}), true)
@@ -102,7 +102,7 @@ test('detectRuntime never claims desktop from a missing or non-string argv', () 
   assert.equal(detectRuntime([]), 'node')
   assert.equal(detectRuntime(undefined), 'node')
   assert.equal(detectRuntime(['node', null, 42, { a: 1 }]), 'node')
-  assert.equal(DESKTOP_HOST_RE.test('C:/dsh/lib/bin.js'), false)
+  assert.equal(DESKTOP_HOST_RE.test('/opt/dsh/lib/bin.js'), false)
 })
 
 test('launcherOf and parentPidOf read the spawn markers and fail to null', () => {
@@ -142,11 +142,11 @@ test('buildSpawnEnv forces ELECTRON_RUN_AS_NODE on the desktop and keeps inherit
 })
 
 test('dshBinVersion reads the package beside the launcher and degrades to null', () => {
-  const bin = path.join('C:', 'Users', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const bin = path.join('/home', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   let asked = null
   const read = (f) => { asked = f; return JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.0-rc.1' }) }
   assert.equal(dshBinVersion(bin, read), '0.2.0-rc.1')
-  assert.equal(asked, path.join('C:', 'Users', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+  assert.equal(asked, path.join('/home', 'x', '.dsh', 'profiles', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
   // 缺少、不可读或没有版本的 package 报告“未知”而不是抛出：启动本身已经成功，
   // 仍须上报。
   assert.equal(dshBinVersion(bin, () => 'not json'), null)
@@ -541,8 +541,8 @@ test('summarizeSessions caps at N newest rows', () => {
 // ---- 会话摘要的标题与谱系 -------------------------------------------------
 //
 // 标题与谱系都来自可选服务或可选的 header 字段，因此两条性质必须同时成立：有值时
-// 出现在摘要里；没有值时摘要与它不存在之前逐字节相同——后者是跨版本 fleet 的前提，
-// 旧实例的应答会原样穿过本插件。
+// 出现在摘要里；没有值时摘要不增加任何键——后者是跨版本 fleet 的前提，旧实例的应答
+// 会原样穿过本插件。
 
 test('summarizeSessions adds the title when the host provides one', () => {
   const rows = summarizeSessions(
@@ -576,29 +576,27 @@ test('summarizeSessions adds lineage from the session header', () => {
     '顶层会话的深度 0、空预设与空父会话都省略：深度 1 与"没有父会话"对读者是两件事')
 })
 
-// 跨版本 fleet 的前提：缺少标题服务时，摘要必须与增补之前逐字节相同，而不是多出
-// 一个 null 或空串——本插件的输出 schema 声明 additionalProperties: false，混入
-// 编造的键会让对端整个工具结果校验失败。
-test('summarizeSessions without a title service is byte-identical to the pre-enrichment shape', () => {
+// 跨版本 fleet 的前提：缺少标题服务时，摘要不得多出任何键——本插件的输出 schema 声明
+// additionalProperties: false，混入编造的键会让对端整个工具结果校验失败。
+test('summarizeSessions without a title service adds no optional key', () => {
   const sessions = [
     { id: 'aaa', header: { createdAt: 100, cwd: '/work/alpha', origin: 'subagent' }, seq: 7 },
     { id: 'bbb', header: { createdAt: 200 } },
     { id: 'ccc', header: { createdAt: 150, cwd: '' }, seq: 0 }
   ]
-  // 增补之前那一份投影的确定形式。
-  const before = [
+  const expected = [
     { id: 'bbb', createdAt: 200 },
     { id: 'ccc', createdAt: 150, events: 0 },
     { id: 'aaa', createdAt: 100, cwd: '/work/alpha', subagent: true, events: 7 }
   ]
-  assert.equal(JSON.stringify(summarizeSessions(sessions)), JSON.stringify(before),
-    '省略 titleOf 时，摘要与增补之前逐字节相同')
+  assert.equal(JSON.stringify(summarizeSessions(sessions)), JSON.stringify(expected),
+    '省略 titleOf 时，摘要不含 title 键')
   // 取值函数存在但没有服务（本插件的降级路径）同样如此。
-  assert.equal(JSON.stringify(summarizeSessions(sessions, 20, { titleOf: () => undefined })), JSON.stringify(before))
+  assert.equal(JSON.stringify(summarizeSessions(sessions, 20, { titleOf: () => undefined })), JSON.stringify(expected))
   // 抛出也不能让摘要变形：服务可以在会话释放后失效。
   assert.equal(
     JSON.stringify(summarizeSessions(sessions, 20, { titleOf: () => { throw new Error('disposed') } })),
-    JSON.stringify(before)
+    JSON.stringify(expected)
   )
 })
 

@@ -24,8 +24,8 @@ const makeElement = () => ({
   remove() {}
 })
 
-// 把元素树转成 React 会提交的树：每个函数组件按 React 的调用顺序执行，hook 才能
-// 对齐。宿主元素（字符串标签）原样返回。
+// 把元素树转成 React 会提交的树：每个函数组件按 React 的调用顺序执行，hook 才能与
+// 渲染顺序一一对应。宿主元素（字符串标签）原样返回。
 const resolve = (node) => {
   if (Array.isArray(node)) return node.map(resolve)
   if (!node || typeof node !== 'object') return node

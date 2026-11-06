@@ -145,7 +145,7 @@ When an instance disappears silently, the drawer's Diagnostics tab lists that in
 - All three files are shared by every local instance, so crash and self-exit records are scoped by that instance's pid and the mutation trace by its port.
 - The diagnostics surface accepts local loopback requests only and is never forwarded over fleet: neither a peer holding a valid fleet bearer nor a trusted LAN browser can read it. Remote rows therefore carry no such tab.
 - Filtering a crash record keeps the whole record — header and stack — so a stack never lands under another instance's name.
-- These files are never pruned by anything, and the diagnostics surface only reads them: nothing deletes or rewrites them.
+- Above 1 MB, the next write keeps only the newer half; the diagnostics surface only reads them, and nothing deletes or rewrites them otherwise.
 
 ## Session fields
 
@@ -161,8 +161,8 @@ Every session summary row is a pure scalar projection; the host's live session o
 An instance row's Restart button and the `instance_restart` agent tool restart a local instance. When the target is not the current instance, the steps are fixed: forward the stop (the target exits gracefully through its own `appExit`, so sessions persist) → poll until the port is genuinely released → launch on that port → wait for it to answer `action=self`.
 
 - **The current instance is handed off.** When tmux or screen is detected, a replacement starts on a free port of the start range inside that session; once it answers `action=self`, the panel returns its absolute token URL and the browser navigates there, after which the old process exits. The token is the one that replacement wrote after starting, and a loopback request confirms it exchanges for a cookie before it is handed over; the host name is the one the browser used for the panel. The old instance serves the panel until the replacement is ready, so there is no empty-port window.
-- Panel starts and restarts run `dsh web` inside tmux (then screen) when available, so an instance no longer leaves with the panel host; without either tool the launch falls back to a direct spawn.
-- The launcher comes from `dsh` on `PATH` first, then the dsh entry in the profile; only when neither exists does the host answer `no_dsh_bin`.
+- Panel starts and restarts run `dsh web` inside tmux (then screen) when available, so an instance does not exit with the panel host; without either tool the launch falls back to a direct spawn.
+- The launcher comes from `dsh` on `PATH` first (POSIX only; on Windows that entry is an extensionless sh shim that cannot be spawned, so the dsh entry in the profile is started through node), then the dsh entry in the profile; only when neither exists does the host answer `no_dsh_bin`.
 - In-place restarts of other instances stay on their original port: the port is empty between the stop and the start, a process that grabs it fails the restart with `port_in_use`, and a port still taken after 15 seconds answers `port_still_in_use`. Neither case moves elsewhere.
 - Without tmux or screen the current instance is still refused; the desktop host and remote rows are never restartable.
 - A panel-triggered restart hands the launch token off to the browser, so the fresh instance opens directly; an agent-tool restart stays headless (`--no-open` is passed on).

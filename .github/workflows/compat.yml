@@ -43,10 +43,9 @@ jobs:
       - name: install development dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: syntax check every module
-        # `files` ships every module in lib/, so the syntax gate covers all of them.
-        # Naming index.js and client.js left lib/fleet.js and lib/agent-tools.js —
-        # the two that carry the peer link and the tool schemas — unchecked on a
-        # push, and a broken one is a plugin that never mounts.
+        # `files` ships every module in lib/, so the gate parses all of them.
+        # Naming individual files would leave the peer link and the tool schemas
+        # unchecked, and a module that fails to parse is a plugin that never mounts.
         run: |
           set -e
           for f in lib/*.js; do node --check "$f"; done
@@ -69,9 +68,6 @@ jobs:
           if ($patch -notmatch [regex]::Escape($pkg.name)) { Write-Error 'patch does not mount this package' }
           $shared = Get-Content lib/shared.js -Raw
           if ($shared -notmatch [regex]::Escape("VERSION = '$($pkg.version)'")) { Write-Error 'lib/shared.js VERSION does not match package version' }
-          # The dock's placement preference is retired: the launcher's position is
-          # a rule inside the launcher fragment, so there is no placement literal to
-          # mirror across lib/shared.js and lib/client.js any more.
 
   # The three shared host fragments are verified by `npm test`, whose http:check /
   # loopback:check / guard:check compare each marked block against the pinned dock
@@ -93,30 +89,14 @@ jobs:
         # `>=0.2.0-rc.1`, so the manifest and this job state one floor rather
         # than a promise nobody executes.
         #
-        # The 0.1.x lines were dropped on purpose. Each one earned its leg by
-        # pinning a behaviour — 0.1.7 renamed the client settings service
-        # (settingsScope -> configForms) and moved a plugin's settings into the
-        # profile entry's config, so the two halves of this plugin take different
-        # code paths there. Those paths stay covered by unit tests; what the boot
-        # job bought was proof that the pair works against a real host, and that
-        # proof is only worth its runner minutes while the line is supported.
-        # 0.1.5 additionally stopped being bootable: its tree fails to load
-        # @deepseek-ai/dsh-sandbox-local, which the launcher of that era cannot
-        # resolve, so the leg was a standing red that taught nothing.
-        #
-        # 0.2.0-rc.1 kept the plugin-facing APIs this plugin reads unchanged from
-        # the 0.1.7 line, which is why it can carry the floor.
-        #
-        # 0.2.1-rc.5 is the newest anchor. Since the floor it adds TLS and a
-        # `getOrigin()` to
-        # the webserver, adds the /connect route and v2 API cookies to the
-        # Connection carrier, and makes the plugin preflight read `engines.dsh`
-        # before peerDependencies when both are present. None of these touch the
-        # surface this plugin reads — `webServer.register`/`registerUpgrade`/`port`,
+        # 0.2.1-rc.5 adds TLS and `getOrigin()` to the webserver, the /connect
+        # route and v2 API cookies to the Connection carrier, and makes the plugin
+        # preflight read `engines.dsh` before peerDependencies. None of these touch
+        # the surface this plugin reads — `webServer.register`/`registerUpgrade`/`port`,
         # `connection.requestRejection`, `tools.register`, `sessions.list`,
-        # `locale`, `slots`, `credentials.resolve`, `dshHomePath`, `appExit` —
-        # and the plugin's own `engines.dsh` and `@deepseek-ai/dsh` peer carry
-        # the same range, so the preflight's order change is neutral.
+        # `locale`, `slots`, `credentials.resolve`, `dshHomePath`, `appExit` — and
+        # the plugin's own `engines.dsh` and `@deepseek-ai/dsh` peer carry the same
+        # range.
         dsh-spec: ['@0.2.0-rc.1', '@0.2.1-rc.5']
     runs-on: ${{ matrix.os }}
     steps:
@@ -126,10 +106,7 @@ jobs:
           node-version: 24
       # dsh prepares a profile's plugins with pnpm and the npm package does not
       # depend on it, so a missing pnpm is a plausible cause of a boot failure.
-      # Measured on these runners: pnpm is absent and every host in this matrix
-      # still boots, so it is not the cause. Record the toolchain anyway —
-      # comparisons between runs are only possible when each run states what it
-      # ran on.
+      # Recording the toolchain lets a failed run say what it ran on.
       - name: report toolchain
         shell: bash
         run: |
@@ -240,10 +217,10 @@ jobs:
           }
           $api = ApiJson GET "http://127.0.0.1:3129/dsh-instance-manager/api?action=list"
           if ($null -eq $api.items) { Write-Error "manager api returned unexpected payload" }
-          # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
-          # re-introduction fails the build instead of silently shipping
+          # An alias route must not answer: a re-introduced alias would ship
+          # silently otherwise.
           $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self" -UseBasicParsing -TimeoutSec 5 -SkipHttpErrorCheck
-          if ($legacy.StatusCode -ne 404) { Write-Error "legacy alias route should be gone, answered $($legacy.StatusCode)" }
+          if ($legacy.StatusCode -ne 404) { Write-Error "legacy alias route should not answer, got $($legacy.StatusCode)" }
           $shellHtml = Get-Content $shellFile -Raw
           $advertised = [regex]::Match($shellHtml, '["''](/?plugins/[^"'']*dsh-instance-manager/client\.js[^"'']*)["'']')
           if (-not $advertised.Success) { Write-Error 'shell did not advertise the client bundle' }
@@ -251,7 +228,7 @@ jobs:
           if (-not $bundlePath.StartsWith('/')) { $bundlePath = "/$bundlePath" }
           $clientCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' @cookieArgs "http://127.0.0.1:3129$bundlePath"
           if ($clientCode -ne '200') { Write-Error "advertised client bundle not served" }
-          # --- request checks (see README 安全模型) ---
+          # --- request checks (see the Security chapter of the README) ---
           function ApiCode([string]$method, [string]$url, [string[]]$curlArgs = @()) {
             & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' -X $method @cookieArgs @curlArgs $url
           }
@@ -282,8 +259,8 @@ jobs:
           if (-not $selfSess.ok) { Write-Error 'self sessions summary failed' }
           $fwdSess = ApiJson GET "$b`?action=sessions&port=$($start.port)"
           if (-not $fwdSess.ok) { Write-Error "forwarded sessions failed: $($fwdSess | ConvertTo-Json -Compress)" }
-          # --- log read: the fresh instance, plus the peer-param rules that
-          # --- silently broke every local read in 0.9.0 (peer=undefined) ---
+          # --- log read: the fresh instance, plus the peer-param rules ---
+          # --- (peer=undefined means no peer; an unknown peer is a 400) ---
           $log = ApiJson GET "$b`?action=logs&port=$($start.port)"
           if (-not $log.ok) { Write-Error "log read failed: $($log | ConvertTo-Json -Compress)" }
           $sentinel = ApiJson GET "$b`?action=logs&port=$($start.port)&peer=undefined"
@@ -294,7 +271,7 @@ jobs:
           $evHeaders = Join-Path $env:RUNNER_TEMP 'dshim-ev-headers.txt'
           & curl.exe -s --noproxy '*' @cookieArgs --max-time 2 -o NUL -D $evHeaders "$evBase/events"
           if ((Get-Content $evHeaders -Raw) -notmatch 'text/event-stream') { Write-Error 'SSE endpoint missing' }
-          # --- fleet link fails closed without a token (F1/F2 regression) ---
+          # --- fleet link fails closed without a token ---
           $linkCode = & curl.exe -s -o NUL -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link"
           if ($linkCode -ne '403') { Write-Error "fleet link must fail closed without a token (got $linkCode)" }
           $null = ApiJson POST "$b`?action=stop&port=$($start.port)"
@@ -357,19 +334,19 @@ jobs:
           cookie_args=(-b "$cookie_jar")
           curl -s --noproxy '*' "${cookie_args[@]}" "http://127.0.0.1:3129/dsh-instance-manager/api?action=list" | grep -q '"items"' \
             || { echo "::error::manager api returned unexpected payload"; kill "$pid" 2>/dev/null; exit 1; }
-          # the <=0.4.1 alias was removed in 0.5.0; assert it is really gone so a
-          # re-introduction fails the build instead of silently shipping
+          # An alias route must not answer: a re-introduced alias would ship
+          # silently otherwise.
           [ "$(code "http://127.0.0.1:3129/dsh-easy-port-manager/api?action=self")" = "404" ] \
-            || { echo "::error::legacy alias route should be gone, did not answer 404"; kill "$pid" 2>/dev/null; exit 1; }
-          # 0.1.7 advertises the roster entry as `plugins/??<name>/client.js&rev=…`
-          # — no leading slash, and the preload list packs every name into one
-          # `??` URL. Excluding the comma from the prefix keeps that combined
-          # URL from matching; the per-entry URL is the one that can be fetched.
+            || { echo "::error::legacy alias route should not answer, did not answer 404"; kill "$pid" 2>/dev/null; exit 1; }
+          # The shell may advertise the roster entry without a leading slash and
+          # pack every name into one `??` URL. Excluding the comma from the prefix
+          # keeps that combined URL from matching; the per-entry URL is the one
+          # that can be fetched.
           bundle_path=$(grep -oE '/?plugins/[^"< ,]*dsh-instance-manager/client\.js[^"< ]*' "$shell_html" | head -n 1 | sed 's/&amp;/\&/g' || true)
           [ -n "$bundle_path" ] || { echo "::error::shell did not advertise client bundle"; kill "$pid" 2>/dev/null; exit 1; }
           case "$bundle_path" in /*) ;; *) bundle_path="/$bundle_path" ;; esac
           [ "$(code "http://127.0.0.1:3129$bundle_path")" = "200" ] || { echo "::error::advertised client bundle not served"; kill "$pid" 2>/dev/null; exit 1; }
-          # --- request checks (see README 安全模型) ---
+          # --- request checks (see the Security chapter of the README) ---
           b="http://127.0.0.1:3129/dsh-instance-manager/api"
           [ "$(code -X GET "$b?action=start")" = "405" ] || { echo "::error::guard regression: GET start must be 405"; exit 1; }
           [ "$(code -X GET "$b?action=stop&port=1")" = "405" ] || { echo "::error::guard regression: GET stop must be 405"; exit 1; }
@@ -397,8 +374,8 @@ jobs:
           # --- sessions summary: self + forwarded to the fresh instance ---
           curl -s --noproxy '*' "${cookie_args[@]}" --max-time 15 "$b?action=sessions" | grep -q '"ok":true' || { echo "::error::self sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=sessions&port=$new_port" | grep -q '"ok":true' || { echo "::error::forwarded sessions failed"; kill "$pid" 2>/dev/null || true; exit 1; }
-          # --- log read: the fresh instance, plus the peer-param rules that
-          # --- silently broke every local read in 0.9.0 (peer=undefined) ---
+          # --- log read: the fresh instance, plus the peer-param rules ---
+          # --- (peer=undefined means no peer; an unknown peer is a 400) ---
           curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=logs&port=$new_port" | grep -q '"ok":true' || { echo "::error::log read failed"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' "${cookie_args[@]}" --max-time 20 "$b?action=logs&port=$new_port&peer=undefined" | grep -q '"ok":true' || { echo "::error::peer=undefined must mean no peer"; kill "$pid" 2>/dev/null || true; exit 1; }
           [ "$(code -X GET "$b?action=logs&port=$new_port&peer=nope")" = "400" ] || { echo "::error::unknown peer must be 400, not a local fallback"; kill "$pid" 2>/dev/null || true; exit 1; }
@@ -406,7 +383,7 @@ jobs:
           ev_root="${b%/api}"
           curl -s --noproxy '*' "${cookie_args[@]}" --max-time 2 -o /dev/null -D /tmp/dshim-ev-h.txt "$ev_root/events" || true
           grep -qi 'text/event-stream' /tmp/dshim-ev-h.txt || { echo "::error::SSE endpoint missing"; kill "$pid" 2>/dev/null || true; exit 1; }
-          # --- fleet link fails closed without a token (F1/F2 regression) ---
+          # --- fleet link fails closed without a token ---
           link_code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" "http://127.0.0.1:3129/dsh-instance-manager/link")
           [ "$link_code" = "403" ] || { echo "::error::fleet link must fail closed without a token (got $link_code)"; kill "$pid" 2>/dev/null || true; exit 1; }
           curl -s --noproxy '*' "${cookie_args[@]}" -X POST "$b?action=stop&port=$new_port" --max-time 30 > /dev/null

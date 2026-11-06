@@ -67,7 +67,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 | startup | `portRange` | string | `'3080-3129,19387'` | 逗号分隔的范围与单端口，端口在 `1`–`65535`，各段合计最多 `1024` 个 |
 
 - `refreshIntervalMs` 超出范围时取边界值，小数取整到最近整数。
-- `fleetToken` 只写不读，不出现在任何 API 应答与日志中。
+- `fleetToken` 在设置界面只写，不出现在任何 API 应答与日志中。
 - `peers` 的 id 为 1–32 位 `[A-Za-z0-9_-]`，origin 可省略 `http://` 与 `https://`，带 userinfo 的 URL 被拒绝。
 - `peers` 是单向配置，需要双向可见时在两端各配一份。
 - `portRange` 的第一段限定新实例可启动的端口范围，其余各段只参与实例发现。
@@ -145,7 +145,7 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 - 三份文件由本机所有实例共用，因此崩溃与自退出按该实例的 pid 筛选，写操作按实例端口筛选。
 - 诊断面只接受本机回环请求，且不做 fleet 转发：持有有效 fleet bearer 的对端与受信局域网浏览器都读不到它。远端行因此没有这个标签。
 - 崩溃记录的筛选保留整条记录（头与异常栈），因此栈不会落到另一个实例名下。
-- 这三份文件从未被读取也从未被清理；诊断面只读，不删除、不改写。
+- 三份文件超过 1 MB 时，下一次写入只保留较新的后半段；诊断面只读，不删除、不改写。
 
 ## 会话字段
 
@@ -162,7 +162,7 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 
 - **当前实例走交接。** 检测到 tmux 或 screen 时，在该会话里用起始端口段内的空闲端口启动替代实例；它应答 `action=self` 后，面板把它带启动 token 的绝对 URL 交给浏览器跳转，旧进程随后退出。token 只取替代实例这次启动写下的那一行，且交付前先用一次回环请求确认它能换到 cookie；主机名沿用浏览器访问面板时用的那个。替代实例就绪前旧实例一直服务面板，因此没有端口空窗。
 - 面板发起的启动与重启优先在 tmux（其次 screen）里执行 `dsh web`，实例因此不随面板宿主退出；没有这两种工具时回退到直接派生。
-- 启动器优先取 `PATH` 上的 `dsh`，其次 profile 内的 dsh 入口；两者都没有才返回 `no_dsh_bin`。
+- 启动器优先取 `PATH` 上的 `dsh`（仅 POSIX；Windows 上那是无法 spawn 的无扩展名 sh shim，改用 profile 内的 dsh 入口经 node 启动），其次 profile 内的 dsh 入口；两者都没有才返回 `no_dsh_bin`。
 - 其他实例的原地重启仍在原端口进行：stop 与 start 之间端口是空的，被别的进程抢到即返回 `port_in_use`；端口 15 秒内未释放返回 `port_still_in_use`。两种情况都不会改用其他端口。
 - 没有 tmux 或 screen 时，当前实例仍拒绝重启；桌面宿主与远端行始终不可重启。
 - 面板触发的重启把启动 token 交接给浏览器，新实例因此能直接打开；agent 工具触发的重启保持无头（启动参数带 `--no-open`）。

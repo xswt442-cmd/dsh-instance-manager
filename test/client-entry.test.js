@@ -5,7 +5,7 @@ import vm from 'node:vm'
 
 // 浏览器侧的注册面：launcher 菜单一行、launcher 自身、面板与 fleet 提示。注册静静
 // 地没有发生，界面就没有可点的入口，也不会在任何地方报错，因此这里逐项断言。
-test('the client registers a composer-dock launcher and two overlay surfaces', () => {
+test('the client registers the utility launcher and two overlay surfaces', () => {
   let definition = null
   let styleElement = null
   let bodyChild = null
@@ -126,7 +126,7 @@ test('the client registers a composer-dock launcher and two overlay surfaces', (
   // 它的位置。
   assert.equal(bodyChild, null, 'the client must not append a floating container to body')
   assert.equal(context.window.__CREATEHELPER_DSH_UTILITY_DOCK_V1__, undefined,
-    'the retired page-local dock protocol stays out of the bundle')
+    'the bundle registers through slots and carries no page-local dock protocol')
   assert.doesNotMatch(source, /getUtilityDock|CREATEHELPER_DSH_UTILITY_DOCK/)
 
   // 抽屉的内存走势头部依赖这个类名，样式表必须声明同一拼写。
@@ -135,7 +135,7 @@ test('the client registers a composer-dock launcher and two overlay surfaces', (
 })
 
 test('0.1.7 serves preferences through configForms, which wins over a concurrent settingsScope', () => {
-  // 该服务改过名字：0.1.5 及以前是 `settingsScope.bind()`，0.1.7-rc.1 起是
+  // 该服务有两个名字：0.1.5 及以前是 `settingsScope.bind()`，0.1.7-rc.1 起是
   // `configForms.get(ns)`。两者都是运行时注入，存在哪个就用哪个绑定——两者同时存在
   // 时只有较新的那个可以绑定，否则偏好会被应用两次。
   let definition = null

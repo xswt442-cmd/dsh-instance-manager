@@ -1135,8 +1135,8 @@ test('action=sessions rejects an unknown peer instead of falling back to local',
 })
 
 // ---- action=diagnostics ---------------------------------------------------
-// 崩溃黑匣子、自退出与写操作追踪此前只有写入路径。三份文件由本机所有实例共用，读取
-// 必须按实例归属筛选，而且端口在这里同样会拼进文件名——校验与 logs 一样不可省。
+// 崩溃黑匣子、自退出与写操作追踪由本机所有实例共用，读取必须按实例归属筛选；端口
+// 在这里同样会拼进文件名，校验与 logs 一样不可省。
 
 const withDiagnosticLogs = async (files, fn) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dshim-diag-'))
@@ -1292,15 +1292,15 @@ test('action=sessions carries the folded title when the optional service provide
   }])
 })
 
-// 跨版本 fleet 的前提：服务缺失时摘要必须与增补之前逐字节相同，混入 title:null 会让
-// 对端输出 schema（additionalProperties: false）之外的编造值变成 ToolOutputError。
-test('action=sessions without the title service answers exactly the pre-enrichment payload', async () => {
+// 跨版本 fleet 的前提：服务缺失时摘要不得多出任何键，混入 title:null 会让对端输出
+// schema（additionalProperties: false）之外的编造值变成 ToolOutputError。
+test('action=sessions without the title service answers exactly the declared payload', async () => {
   const plain = {
     id: 'abcdef0123456789',
     header: { createdAt: 100, cwd: '/work/alpha', origin: 'subagent' },
     seq: 12
   }
-  const before = JSON.stringify({
+  const expected = JSON.stringify({
     ok: true,
     port: 3080,
     total: 1,
@@ -1318,7 +1318,7 @@ test('action=sessions without the title service answers exactly the pre-enrichme
     port: 3080,
     sessions: { list: () => [plain] }
   })
-  assert.equal(JSON.stringify(missing.json), before, '服务缺失时逐字节相同')
+  assert.equal(JSON.stringify(missing.json), expected, '服务缺失时不含 title 键')
 
   // 服务在但会话还没有合格标题时同样不写该键——`get` 返回 undefined 是真实存在的状态
   // （用户还没有发出第一条消息）。
@@ -1329,7 +1329,7 @@ test('action=sessions without the title service answers exactly the pre-enrichme
     sessions: { list: () => [plain] },
     sessionTitle: { get: () => undefined }
   })
-  assert.equal(JSON.stringify(untitled.json), before, '没有标题时同样省略该键')
+  assert.equal(JSON.stringify(untitled.json), expected, '没有标题时同样省略该键')
 })
 
 // 客户端会把缺失的 `peer` 字符串化成字面量 "undefined"，它到达宿主时是一个格式合法的

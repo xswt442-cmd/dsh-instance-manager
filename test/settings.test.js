@@ -57,7 +57,7 @@ const mockSettingsHost = ({ fail = false, sections = {} } = {}) => {
   return { ctx, calls }
 }
 
-test('live namespace registers dock/interval/token/peers with the env base layer', () => {
+test('live namespace registers interval/token/peers with the env base layer', () => {
   const env = {
     DSHIM_FLEET_TOKEN: 'secret-token',
     DSHIM_PEERS: 'a@http://10.0.0.1:3080,b@10.0.0.2:3080'
