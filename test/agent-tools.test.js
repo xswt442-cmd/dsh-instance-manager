@@ -97,6 +97,62 @@ test('instance_start delegates to the shared launch flow', async () => {
   assert.match(startDef.output.render({}, v)[0].text, /started on port 3099 \(pid 222\)/)
 })
 
+// 输出根是 additionalProperties: false：任何未声明的键都会让整个工具结果被宿主拒绝，
+// 而不是被忽略。宿主侧的启动结果还带面板交接用的内部字段，工具必须只采纳声明过的键。
+const assertDeclaredOnly = (def, value) => {
+  const declared = def.output.schema.properties
+  assert.deepEqual(Object.keys(value).filter((k) => !(k in declared)), [])
+}
+
+test('instance_start drops launch-internal fields from its result', async () => {
+  const { api } = makeApi({
+    start: async () => ({
+      ok: true, port: 3099, pid: 222,
+      bin: '/opt/dsh/lib/bin.js', binVersion: '0.2.2-rc.1',
+      logSince: 812, session: { tool: 'tmux', name: 'dsh-3099' }
+    })
+  })
+  const def = byName(buildAgentTools(identity, api)).instance_start
+  const v = await def.execute({})
+  assert.deepEqual(v, {
+    ok: true, port: 3099, pid: 222,
+    bin: '/opt/dsh/lib/bin.js', binVersion: '0.2.2-rc.1'
+  })
+  assertDeclaredOnly(def, v)
+  assert.match(def.output.render({}, v)[0].text, /\(v0\.2\.2-rc\.1\)/)
+})
+
+test('instance_start reports a missing launcher instead of failing output validation', async () => {
+  const detail = '/home/u/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js'
+  const { api } = makeApi({
+    start: async () => ({
+      ok: false, code: 'no_dsh_bin', detail,
+      error: '未找到 dsh 启动器：PATH 中没有 dsh，也没有 ' + detail
+    })
+  })
+  const def = byName(buildAgentTools(identity, api)).instance_start
+  const v = await def.execute({})
+  assert.equal(v.ok, false)
+  assert.equal(v.code, 'no_dsh_bin')
+  assert.equal('detail' in v, false, 'the diagnostic path stays in error, not in an undeclared key')
+  assert.match(v.error, /bin\.js/)
+  assertDeclaredOnly(def, v)
+  assert.match(def.output.render({}, v)[0].text, /instance start failed/)
+})
+
+test('instance_restart drops the same launch-internal fields', async () => {
+  const { api } = makeApi({
+    restart: async (port) => ({
+      ok: true, restarted: true, port, pid: 333,
+      bin: '/opt/dsh/lib/bin.js', binVersion: '0.2.2-rc.1', logSince: 42
+    })
+  })
+  const def = byName(buildAgentTools(identity, api)).instance_restart
+  const v = await def.execute({ port: 3099 })
+  assert.deepEqual(v, { ok: true, restarted: true, port: 3099, pid: 333 })
+  assertDeclaredOnly(def, v)
+})
+
 test('instance_stop forwards foreign ports and validates its argument', async () => {
   const { api, calls } = makeApi()
   const stopDef = byName(buildAgentTools(identity, api)).instance_stop

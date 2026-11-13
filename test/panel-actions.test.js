@@ -75,6 +75,7 @@ const mountPanel = ({ fetchImpl, location }) => {
   let effectCursor = 0
   let pending = []
   const registrations = []
+  const docListeners = {}
   let definition = null
 
   // hook 按调用序号索引。本 bundle 中每个组件都不带 props 和 children 调用，因此一个
@@ -120,10 +121,17 @@ const mountPanel = ({ fetchImpl, location }) => {
       head: { appendChild() {} },
       createElement: makeElement,
       querySelector: () => null,
-      // 面板打开时会注册 document 级监听器；缺少这些方法会让安装监听器的 effect
-      // 抛出，整轮渲染随之中止。
-      addEventListener() {},
-      removeEventListener() {}
+      // 面板打开时会注册 document 级监听器；驱动把它们收起来，测试因此能真的派发
+      // Escape 与面板外的按下，而不只是断言源码里出现过某个字符串。
+      addEventListener(name, listener) {
+        if (!docListeners[name]) docListeners[name] = []
+        docListeners[name].push(listener)
+      },
+      removeEventListener(name, listener) {
+        const list = docListeners[name] || []
+        const i = list.indexOf(listener)
+        if (i >= 0) list.splice(i, 1)
+      }
     },
     window: {
       addEventListener() {},
@@ -202,7 +210,7 @@ const mountPanel = ({ fetchImpl, location }) => {
     }
   }
   const renderTree = () => { cursor = 0; return resolve(panel.render()) }
-  return { flush, panel, renderTree }
+  return { flush, panel, renderTree, docListeners }
 }
 
 // 已解析的树混合元素与数组（Fragment 解析为其 children 数组），遍历必须同时下降
@@ -240,12 +248,52 @@ const panelWithFetch = (overrides = {}) => {
     else if (/action=start/.test(query)) payload = overrides.start || { ok: true, port: 3081, pid: 2 }
     return { json: async () => payload }
   }
-  const panel = mountPanel({ fetchImpl })
-  return { panel, calls }
+  const mounted = mountPanel({ fetchImpl })
+  return { panel: mounted, calls, docListeners: mounted.docListeners }
 }
 
 const buttonByText = (tree, matcher) =>
   findAll(tree, (n) => n.type === 'button' && matcher.test(textOf(n)))[0]
+
+test('the status row shows its full text instead of clipping it', async () => {
+  const { panel } = panelWithFetch()
+  await panel.flush()
+  const line = findAll(panel.renderTree(), (n) => n.props.className === 'dshim-line2')[0]
+  assert.ok(line, 'a row must render its status line')
+  assert.match(textOf(line), /pid 1/, 'the row still reports its pid')
+  assert.equal(line.props.title, textOf(line), 'the tooltip carries the whole status string')
+
+  const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const rule = source.match(/\.dshim-line2\{[^}]*\}/)[0]
+  assert.doesNotMatch(rule, /text-overflow:ellipsis/, 'an ellipsis would hide the fields again')
+  assert.match(rule, /white-space:normal/, 'the status line wraps when the row is narrow')
+})
+
+test('the panel closes on Escape', async () => {
+  const { panel, docListeners } = panelWithFetch()
+  await panel.flush()
+  assert.ok(panel.renderTree(), 'the panel opens from the utility menu')
+  const onKey = (docListeners.keydown || []).slice(-1)[0]
+  assert.ok(onKey, 'an open panel must listen for keydown')
+  onKey({ key: 'Escape' })
+  await panel.flush()
+  assert.equal(panel.renderTree(), null, 'Escape dismisses the panel')
+})
+
+test('a press outside the panel closes it, a press inside keeps it open', async () => {
+  const { panel, docListeners } = panelWithFetch()
+  await panel.flush()
+  const onDown = (docListeners.mousedown || []).slice(-1)[0]
+  assert.ok(onDown, 'an open panel must listen for presses outside it')
+
+  onDown({ target: { closest: (selector) => selector === '.dshim-panel' ? {} : null } })
+  await panel.flush()
+  assert.ok(panel.renderTree(), 'a press on a row inside the panel must not dismiss it')
+
+  onDown({ target: { closest: () => null } })
+  await panel.flush()
+  assert.equal(panel.renderTree(), null, 'a press outside the panel dismisses it')
+})
 
 test('the start button sends the typed port, and omits it when left empty', async () => {
   const { panel, calls } = panelWithFetch()
