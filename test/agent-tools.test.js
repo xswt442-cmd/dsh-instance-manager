@@ -140,6 +140,27 @@ test('instance_start reports a missing launcher instead of failing output valida
   assert.match(def.output.render({}, v)[0].text, /instance start failed/)
 })
 
+test('a successful launch without a pid renders no undefined annotation', async () => {
+  // 屏幕会话托管的启动拿不到宿主 pid，投影会省略该键；渲染器不能把它拼成
+  // "(pid undefined)"。
+  const { api } = makeApi({
+    start: async () => ({ ok: true, port: 3099, pid: null, logSince: 4 }),
+    restart: async (port) => ({ ok: true, restarted: true, port, pid: null, logSince: 4 })
+  })
+  const tools = byName(buildAgentTools(identity, api))
+  const start = tools.instance_start
+  const startValue = await start.execute({})
+  assert.equal('pid' in startValue, false)
+  assert.doesNotMatch(start.output.render({}, startValue)[0].text, /undefined|null/)
+  assert.match(start.output.render({}, startValue)[0].text, /started on port 3099/)
+
+  const restart = tools.instance_restart
+  const restartValue = await restart.execute({ port: 3099 })
+  assert.equal('pid' in restartValue, false)
+  assert.doesNotMatch(restart.output.render({}, restartValue)[0].text, /undefined|null/)
+  assert.match(restart.output.render({}, restartValue)[0].text, /restarted on port 3099/)
+})
+
 test('instance_restart drops the same launch-internal fields', async () => {
   const { api } = makeApi({
     restart: async (port) => ({

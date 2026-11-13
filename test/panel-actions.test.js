@@ -189,6 +189,11 @@ const mountPanel = ({ fetchImpl, location }) => {
   const menuRow = withHooks(() => findButton(resolve(item.render())))
   assert.ok(menuRow, 'the row must render a button')
   menuRow.props.onClick()
+  // 关闭后重新从 launcher 行打开面板，走的是用户真实会走的入口。
+  const reopen = () => {
+    const row = withHooks(() => findButton(resolve(item.render())))
+    row.props.onClick()
+  }
 
   const flush = async () => {
     // 只排空微任务不够：点击处理器会 `await` 真实 fetch，因此驱动持续重渲染，直到
@@ -210,7 +215,7 @@ const mountPanel = ({ fetchImpl, location }) => {
     }
   }
   const renderTree = () => { cursor = 0; return resolve(panel.render()) }
-  return { flush, panel, renderTree, docListeners }
+  return { flush, panel, renderTree, docListeners, reopen }
 }
 
 // 已解析的树混合元素与数组（Fragment 解析为其 children 数组），遍历必须同时下降
@@ -244,24 +249,42 @@ const panelWithFetch = (overrides = {}) => {
     calls.push({ url: String(url), method: (init && init.method) || 'GET' })
     const query = String(url).split('?')[1] || ''
     let payload = { ok: true }
-    if (/action=list/.test(query)) payload = LIST_ONE
+    if (/action=list/.test(query)) payload = overrides.list || LIST_ONE
     else if (/action=start/.test(query)) payload = overrides.start || { ok: true, port: 3081, pid: 2 }
     return { json: async () => payload }
   }
   const mounted = mountPanel({ fetchImpl })
-  return { panel: mounted, calls, docListeners: mounted.docListeners }
+  return { panel: mounted, calls, docListeners: mounted.docListeners, reopen: mounted.reopen }
 }
 
 const buttonByText = (tree, matcher) =>
   findAll(tree, (n) => n.type === 'button' && matcher.test(textOf(n)))[0]
 
-test('the status row shows its full text instead of clipping it', async () => {
-  const { panel } = panelWithFetch()
+const LIST_FULL = {
+  ok: true,
+  selfVersion: '0.13.1',
+  items: [{
+    port: 3080, managed: true, current: true, ui: true, rowKey: 'local:3080',
+    pid: 1959, startedAt: Date.now() - 45 * 60 * 1000,
+    rss: Math.round(1.06 * 1024 * 1024 * 1024),
+    version: '0.13.1', sessions: 7
+  }]
+}
+
+test('the status row shows every field in both its text and its tooltip', async () => {
+  const { panel } = panelWithFetch({ list: LIST_FULL })
   await panel.flush()
   const line = findAll(panel.renderTree(), (n) => n.props.className === 'dshim-line2')[0]
   assert.ok(line, 'a row must render its status line')
-  assert.match(textOf(line), /pid 1/, 'the row still reports its pid')
-  assert.equal(line.props.title, textOf(line), 'the tooltip carries the whole status string')
+  const rendered = textOf(line)
+  assert.equal(line.props.title, rendered, 'the tooltip carries the whole status string')
+  // 逐个字段断言：只匹配 pid 会让「其余字段都不渲染」也通过测试。
+  for (const expected of [
+    /pid 1959/, /up \d+m/, /1\.06 GB/, /v0\.13\.1/, /7 sessions/, /this panel/
+  ]) {
+    assert.match(rendered, expected, 'the rendered line must keep ' + expected)
+    assert.match(line.props.title, expected, 'the tooltip must keep ' + expected)
+  }
 
   const source = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
   const rule = source.match(/\.dshim-line2\{[^}]*\}/)[0]
@@ -293,6 +316,45 @@ test('a press outside the panel closes it, a press inside keeps it open', async 
   onDown({ target: { closest: () => null } })
   await panel.flush()
   assert.equal(panel.renderTree(), null, 'a press outside the panel dismisses it')
+})
+
+test('dismissing the panel mid-start does not let the start be submitted twice', async () => {
+  let settleStart
+  const startGate = new Promise((resolve) => { settleStart = resolve })
+  let startCalls = 0
+  const mounted = mountPanel({
+    fetchImpl: async (url) => {
+      const query = String(url).split('?')[1] || ''
+      if (/action=start/.test(query)) {
+        startCalls++
+        await startGate
+        return { json: async () => ({ ok: true, port: 3081, pid: 2 }) }
+      }
+      if (/action=list/.test(query)) return { json: async () => LIST_ONE }
+      return { json: async () => ({ ok: true }) }
+    }
+  })
+  await mounted.flush()
+  buttonByText(mounted.renderTree(), /New instance/).props.onClick()
+  assert.equal(startCalls, 1, 'the first click starts a request')
+
+  // 请求还在途时收起面板，再从 launcher 行打开：新的 PanelBody 不能重新变得可点。
+  ;(mounted.docListeners.keydown || []).slice(-1)[0]({ key: 'Escape' })
+  await mounted.flush()
+  assert.equal(mounted.renderTree(), null, 'the panel is dismissed')
+  mounted.reopen()
+  await mounted.flush()
+  const busyButton = buttonByText(mounted.renderTree(), /Starting|New instance/)
+  assert.ok(busyButton, 'the start button is still rendered')
+  assert.equal(busyButton.props.disabled, true, 'an in-flight start keeps the button disabled after reopening')
+  busyButton.props.onClick()
+  await mounted.flush()
+  assert.equal(startCalls, 1, 'a second click must not launch another instance')
+
+  settleStart()
+  await mounted.flush()
+  assert.equal(buttonByText(mounted.renderTree(), /New instance/).props.disabled, false,
+    'the button returns to idle once the request settles')
 })
 
 test('the start button sends the typed port, and omits it when left empty', async () => {

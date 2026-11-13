@@ -10,6 +10,7 @@ Release Notes 由对应版本段生成；最新版本在前。
 - `instance_start` 与 `instance_restart` 此前把带交接字段（`logSince`、`session`、`detail`）的宿主侧结果原样作为工具输出返回，封闭的输出 schema 因此把整次调用判为非法输出；现在只返回声明过的键，找不到启动器时也能照实报出 `no_dsh_bin`。 in #6 @wwuzhongyu-lang
 - 面板状态行不再被单行省略号截断：随行宽换行，并以 `title` 保留完整字符串，内存、版本与会话数都能读到。 in #5 @anonamerjaxon-dev
 - 面板现在可用 Escape 或在面板外按下收起，面板内的交互与 × 按钮不受影响。 in #5 @anonamerjaxon-dev
+- 请求在途时收起并重开面板不再允许重复提交同一个动作：在途标记移出会随面板卸载的组件，启动、停止与重启各自也拒绝在途中的第二次提交。
 
 ## 0.13.0 - 2026-10-27
 

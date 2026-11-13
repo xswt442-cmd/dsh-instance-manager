@@ -10,6 +10,7 @@ For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 - `instance_start` and `instance_restart` returned the host-side launch result with handoff fields (`logSince`, `session`, `detail`) intact, so the closed output schema rejected the whole call; both tools now return only declared keys, and a missing launcher reports `no_dsh_bin` as intended. in #6 @wwuzhongyu-lang
 - The panel status line no longer clips to a single ellipsized line: it wraps with the row width and keeps the full string in `title`, so memory, version, and session count stay readable. in #5 @anonamerjaxon-dev
 - The panel now dismisses on Escape and on a press outside it; interactions inside the panel and the × button are unchanged. in #5 @anonamerjaxon-dev
+- Dismissing and reopening the panel while a request is in flight no longer allows that action to be submitted twice: the in-flight guards live outside the unmountable panel component, and start, stop, and restart each refuse a second submission.
 
 ## 0.13.0 - 2026-10-27
 
