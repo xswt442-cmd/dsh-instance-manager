@@ -3,6 +3,14 @@
 Release notes are generated from the matching version section; newest first.
 For Chinese, see [CHANGELOG.md](CHANGELOG.md).
 
+## 0.13.1 - 2026-11-14
+
+### Fixed
+
+- `instance_start` and `instance_restart` returned the host-side launch result with handoff fields (`logSince`, `session`, `detail`) intact, so the closed output schema rejected the whole call; both tools now return only declared keys, and a missing launcher reports `no_dsh_bin` as intended. in #6 @wwuzhongyu-lang
+- The panel status line no longer clips to a single ellipsized line: it wraps with the row width and keeps the full string in `title`, so memory, version, and session count stay readable. in #5 @anonamerjaxon-dev
+- The panel now dismisses on Escape and on a press outside it; interactions inside the panel and the × button are unchanged. in #5 @anonamerjaxon-dev
+
 ## 0.13.0 - 2026-10-27
 
 ### Added
