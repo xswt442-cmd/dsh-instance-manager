@@ -1,0 +1,3 @@
+interface:
+  display_name: "PR"
+  short_description: "Draft bilingual PRs from diffs and repository templates"

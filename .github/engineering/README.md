@@ -25,7 +25,7 @@ This directory holds one index. Every kind of information has a single home; do 
 ## Actions
 
 - `compat` / `docs` run on pushes to `main` and `dev`, on `pull_request`, and on `workflow_dispatch`; `compat` also runs on the nightly schedule. `publish` runs only on a `v*` tag.
-- CI runs on `pull_request` so outside contributions are tested; there are no PR templates, paired-edit gates, or review bots.
+- CI runs on `pull_request` so outside contributions are tested; a bilingual PR template and the `pr` skill describe how to draft one. There are no paired-edit gates or review bots.
 - Every workflow sets `permissions: contents: read` at the top; only the job that creates the GitHub release declares write access. CI workflows cancel superseded runs per ref; publishes queue and are never cancelled.
 - `actions/checkout` and `actions/setup-node` use the same pinned versions across the workflows.
 
