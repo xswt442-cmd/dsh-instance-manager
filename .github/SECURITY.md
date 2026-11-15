@@ -6,7 +6,7 @@ Security fixes ship as a new version on the current release line. `package.json`
 
 ## Reporting
 
-Reports go through the private vulnerability reporting form linked from the repository's Security tab. Public issues must not contain exploit details, reproduction steps for an unfixed weakness, credentials, or private host information.
+Open an issue that only asks for a preferred security contact. Keep exploit details, reproduction steps for an unfixed weakness, credentials, and private host information out of that issue; provide them through the contact the maintainer names in reply.
 
 A report names the affected version, the affected component, the observed behavior, and the steps that reproduce it.
 
@@ -16,4 +16,4 @@ The local HTTP request guard, fleet bearer tokens and route authorization, insta
 
 ## Handling
 
-Maintainers acknowledge reports through the private report, assess each finding against the current release line, and record a confirmed fix in the release notes of the version that ships it. Report details stay in the private report until that release is published.
+Maintainers answer the contact request, assess each finding against the current release line, and record a confirmed fix in the release notes of the version that ships it. Report details stay out of public issues until that release is published.
