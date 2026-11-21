@@ -1,5 +1,5 @@
 ---
-name: pr
+name: mypr
 description: "Use when drafting or revising a pull request title or body from actual repository changes. Read the repository PR template, explain the final implementation, write an evidence-grounded bilingual completed-task checklist, and report real verification. Do not use for changelogs or release notes."
 metadata:
   credits:
@@ -12,6 +12,19 @@ metadata:
 # PR: clear structure, useful explanation
 
 Write a PR that a reviewer can understand without reconstructing the whole diff. **Keep the structure light; give the changes enough substance.**
+
+## Install and update
+
+This skill ships its own installer. The source lives at `.github/engineering/skills/mypr/`, and agents load the copy at `.agents/skills/mypr/`.
+
+```sh
+node .github/engineering/skills/mypr/scripts/install.mjs --check .
+node .github/engineering/skills/mypr/scripts/install.mjs --apply .
+```
+
+`--check` lists files that differ and exits non-zero; `--apply` writes them and refuses to overwrite any path that has local modifications. Everything under `repo/` mirrors into the repository root, so `repo/.github/PULL_REQUEST_TEMPLATE.md` is installed as `.github/PULL_REQUEST_TEMPLATE.md` — the template this skill reads travels with the skill. `--source` prints the commit and date the copy came from.
+
+Never edit an installed copy: change the source and re-apply. Repository-specific rules belong in `AGENTS.md`, not inside `SKILL.md`.
 
 ## One format source
 

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Chinese prose"
+  short_description: "Rewrite Chinese docs so they read like a person wrote them"
