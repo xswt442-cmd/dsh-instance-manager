@@ -1,0 +1,11 @@
+docs: clear the wording findings and settle the semicolons
+
+26 semicolons in 3.9k characters. Bullets take a comma, paragraphs take
+a full stop, so no bullet grew past two sentences.
+
+Also: 取不到 becomes 无法获取, 读不到 becomes 无法读取, and the handover
+section is split into what happens and how the token is confirmed first.
+
+Four term-casing warnings remain on purpose: dsh, web, agent and fleet
+appear lowercase as command and profile names (dsh web, web profile,
+fleet bearer) and capitalised as product names.

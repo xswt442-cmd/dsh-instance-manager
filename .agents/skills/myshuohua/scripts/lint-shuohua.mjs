@@ -94,6 +94,9 @@ function mask(lines) {
       return ' '.repeat(line.length);
     }
     return line
+      // 徽章是图片，alt 和 URL 都不是正文。`[![CI](...)](...)` 这种嵌套要整个遮掉。
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, (m) => ' '.repeat(m.length))
+      .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, (m) => ' '.repeat(m.length))
       .replace(/`[^`]*`/g, (m) => ' '.repeat(m.length))
       .replace(/<!--[\s\S]*?-->/g, (m) => ' '.repeat(m.length))
       .replace(/<[^>]+>/g, (m) => ' '.repeat(m.length))

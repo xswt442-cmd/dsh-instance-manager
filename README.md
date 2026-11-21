@@ -17,10 +17,10 @@ DSH Web 的实例管理器。它为本机可见的每个 dsh web 实例显示一
 
 ## 功能
 
-- 每个实例一行：端口、PID、运行时长、会话数、常驻内存与版本；当前实例排第一行，其余按端口升序。
-- 启动新实例：端口留空时取起始端口段内第一个空闲端口；指定端口已被占用时报错，不改用其他端口。检测到 tmux 或 screen 时，启动在持久化会话内执行 `dsh web`，实例不随面板宿主退出。
-- 打开实例：点击某行的 `:端口` 进入该实例界面；启动 token 由宿主即时换取，不进入面板状态与链接。
-- 停止实例：单个、当前或全部本地实例；远程行只读，也不参与 stop-all。
+- 每个实例一行：端口、PID、运行时长、会话数、常驻内存与版本，当前实例排第一行，其余按端口升序。
+- 启动新实例：端口留空时取起始端口段内第一个空闲端口，指定端口已被占用时报错，不改用其他端口。检测到 tmux 或 screen 时，启动在持久化会话内执行 `dsh web`，实例不随面板宿主退出。
+- 打开实例：点击某行的 `:端口` 进入该实例界面，启动 token 由宿主即时换取，不进入面板状态与链接。
+- 停止实例：单个、当前或全部本地实例，远程行只读，也不参与 stop-all。
 - 原地重启：在其他本地实例上仍在**同一端口**重启，无需手动 stop + start 两步。
 - 当前实例重启：检测到 tmux 或 screen 时在新端口启动替代实例，就绪后带 token 跳转，旧实例随后退出。
 - 每个实例的只读视图：stdout/stderr 日志、会话概要（时间、折叠标题或短 id、工作目录、子代理标记、预设、委派深度、事件数），该实例正在运行的内容，以及诊断记录（崩溃黑匣子、自退出记录、写操作追踪）。
@@ -41,15 +41,15 @@ npm install dsh-instance-manager
 dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 ```
 
-- `npm install` 只安装 package；bundle 进入 profile 后 DSH 才启用本插件，`dsh plugin add` 一次完成这两步。
+- `npm install` 只安装 package，bundle 进入 profile 后 DSH 才启用本插件，`dsh plugin add` 一次完成这两步。
 - 安装后重启 DSH Web 生效。
 
 ## 配置
 
 ### live 与 startup 两节
 
-- `live`：刷新间隔、Fleet token、peer 列表；宿主 watch 该节，修改即时生效。
-- `startup`：端口清单；该节 `applies: 'restart'`，宿主仅在构造时读取一次，未生效的修改在设置界面标为待生效。
+- `live`：刷新间隔、Fleet token、peer 列表，宿主 watch 该节，修改即时生效。
+- `startup`：端口清单，该节 `applies: 'restart'`，宿主仅在构造时读取一次，未生效的修改在设置界面标为待生效。
 
 来源是 profile 条目自身的 `config`：改条目 config 会重启本插件，`live` 一节的改动仍立即生效。
 
@@ -69,7 +69,7 @@ dsh plugin --profile web add github:xswt442-cmd/dsh-instance-manager
 - `portRange` 的第一段限定新实例可启动的端口范围，其余各段只参与实例发现。
 - 发现同时扫描心跳登记过的端口，`--port 4000` 手工启动的实例仍会出现在列表里。
 - `portRange` 任一段不可用时，整份清单回落到内置默认值。
-- 默认值包含桌面端宿主的默认端口 `19387`；未运行本插件的桌面端宿主由该端口的探测进入列表，其行不带 `runtime`，也不由本插件托管。
+- 默认值包含桌面端宿主的默认端口 `19387`，未运行本插件的桌面端宿主由该端口的探测进入列表，其行不带 `runtime`，也不由本插件托管。
 
 界面语言跟随 DSH Settings → General 的全局语言设置。本插件不单独存储语言偏好。
 
@@ -92,7 +92,7 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 3. 内置默认值。
 
 - 环境变量属于 composition 的 `base` 层，位于用户已存的值之下、schema 默认值之上。
-- 只有格式正确的值进入该层；格式错误的 `DSHIM_PORT_RANGE` 不会导致注册失败，该字段用内置默认值。
+- 只有格式正确的值进入该层，格式错误的 `DSHIM_PORT_RANGE` 不会导致注册失败，该字段用内置默认值。
 
 ### Fleet token 的解析顺序
 
@@ -107,28 +107,28 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 
 ## 实例字段
 
-心跳文件 `<home>/run/instances/<port>.json` 记录本插件的实例身份；`action=self` 应答与 agent 工具的行带其中的 `pid`、`port`、`runtime` 等字段。
+心跳文件 `<home>/run/instances/<port>.json` 记录本插件的实例身份。`action=self` 应答与 agent 工具的行带其中的 `pid`、`port`、`runtime` 等字段。
 
-- `runtime`：`desktop` 表示桌面应用自己的宿主进程，任何停止操作都跳过它；`node` 表示普通 web 实例。判据是宿主被要求运行的入口脚本，因此环境变量（`ELECTRON_RUN_AS_NODE`）只作为诊断字段：桌面端启动的 web 实例同样带该变量。
-- `launcher`：启动该实例的宿主类型，`desktop` 或 `web`；`parentPid`：发起启动的宿主 pid。两者由打过补丁的宿主注入，取不到时为 `null`，只写进心跳文件，不出现在 `action=self` 应答、agent 工具行与面板里。
-- 本插件回报的行若不带 `runtime`，按 `node` 处理；只能靠端口探测发现的行不带该字段。
-- `name` 是列表进程自己的可执行文件名，同一份列表里每行相同，不是被列实例的身份；实例身份由 `runtime`、`pid` 与 `version` 区分。
+- `runtime`：`desktop` 表示桌面应用自己的宿主进程，任何停止操作都跳过它，`node` 表示普通 web 实例。判据是宿主被要求运行的入口脚本，因此环境变量（`ELECTRON_RUN_AS_NODE`）只作为诊断字段：桌面端启动的 web 实例同样带该变量。
+- `launcher`：启动该实例的宿主类型，`desktop` 或 `web`，`parentPid`：发起启动的宿主 pid。两者由打过补丁的宿主注入，无法获取时为 `null`，只写进心跳文件，不出现在 `action=self` 应答、agent 工具行与面板里。
+- 本插件回报的行若不带 `runtime`，按 `node` 处理，只能靠端口探测发现的行不带该字段。
+- `name` 是列表进程自己的可执行文件名，同一份列表里每行相同，不是被列实例的身份，实例身份由 `runtime`、`pid` 与 `version` 区分。
 
 ## 安全
 
-- 插件自带的本地守卫拒绝跨站 Origin、非回环 Host 与不安全的 Fetch Metadata；宿主挂载了 Connection 时，这一层由它承担。
+- 插件自带的本地守卫拒绝跨站 Origin、非回环 Host 与不安全的 Fetch Metadata，宿主挂载了 Connection 时，这一层由它承担。
 - 是否需要 Fleet Bearer 由真实 TCP 对端地址与 `Host` 头共同判定，两者任一非回环即要求 bearer。
 - 远程路由在守卫之前先按 bearer 判定，本地请求不需要 token。
-- 对端地址缺失时直接拒绝；token 缺失或无法解析时拒绝远程请求。
+- 对端地址缺失时直接拒绝，token 缺失或无法解析时拒绝远程请求。
 - 写操作仅接受 POST，方法名按大小写不敏感匹配。
 - 端口参数必须是 1–65535 的十进制整数。
 - 事件流与所有 JSON 应答携带 `cache-control: no-store`。
 - 意外失败的 500 仅返回固定 `code`，异常原文只写入宿主日志。
 - Fleet token 没有操作级权限划分，持有者可启动或停止本机实例并读取会话信息，应仅授予可信设备。
-- 宿主挂载了 Connection 时，浏览器 API 与事件流复用其签名 cookie；准入由 Connection 的 Host/Origin 校验与 cookie 判定，插件自带守卫不参与。
+- 宿主挂载了 Connection 时，浏览器 API 与事件流复用其签名 cookie，准入由 Connection 的 Host/Origin 校验与 cookie 判定，插件自带守卫不参与。
 - 内部实例确认与转发只走严格 loopback 探测，SSE 仅向本机开放。
 - 每个被接受的写操作在 `<home>/launcher/logs/dshim-requests.log` 记录一行：对端地址、准入路径、请求携带的 `Host`/`Origin`/`Referer`/`User-Agent`、目标端口与结果。
-- `dshim-selfexit.log` 只记录触发者；Cookie 与 Authorization 既不读取也不写入。
+- `dshim-selfexit.log` 只记录触发者，Cookie 与 Authorization 既不读取也不写入。
 
 ## 诊断记录
 
@@ -139,9 +139,9 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 - 写操作追踪 `dshim-requests.log`：每个被接受的写操作一行，含对端地址、准入路径、`Host`/`Origin`/`Referer`/`User-Agent`、目标端口与结果。
 
 - 三份文件由本机所有实例共用，因此崩溃与自退出按该实例的 pid 筛选，写操作按实例端口筛选。
-- 诊断面只接受本机回环请求，且不做 fleet 转发：持有有效 fleet bearer 的对端与受信局域网浏览器都读不到它。远端行因此没有这个标签。
+- 诊断面只接受本机回环请求，且不做 fleet 转发：持有有效 fleet bearer 的对端与受信局域网浏览器都无法读取它。远端行因此没有这个标签。
 - 崩溃记录的筛选保留整条记录（头与异常栈），因此栈不会落到另一个实例名下。
-- 三份文件超过 1 MB 时，下一次写入只保留较新的后半段；诊断面只读，不删除、不改写。
+- 三份文件超过 1 MB 时，下一次写入只保留较新的后半段，诊断面只读，不删除、不改写。
 
 ## 会话字段
 
@@ -156,16 +156,17 @@ $env:DSHIM_FLEET_TOKEN_REF = 'DSHIM_FLEET_TOKEN'       # 存放 token 的环境�
 
 实例行的「重启」按钮与 agent 工具 `instance_restart` 重启本地实例。目标不是当前实例时，步骤固定为：转发停止（目标经自己的 `appExit` 优雅退出，会话落盘）→ 轮询等待端口真正空出来 → 在该端口启动 → 等它应答 `action=self`。
 
-- **当前实例走交接。** 检测到 tmux 或 screen 时，在该会话里用起始端口段内的空闲端口启动替代实例；它应答 `action=self` 后，面板把它带启动 token 的绝对 URL 交给浏览器跳转，旧进程随后退出。token 只取替代实例这次启动写下的那一行，且交付前先用一次回环请求确认它能换到 cookie；主机名沿用浏览器访问面板时用的那个。替代实例就绪前旧实例一直服务面板，因此没有端口空窗。
-- 面板发起的启动与重启优先在 tmux（其次 screen）里执行 `dsh web`，实例因此不随面板宿主退出；没有这两种工具时回退到直接派生。
-- 启动器优先取 `PATH` 上的 `dsh`（仅 POSIX；Windows 上那是无法 spawn 的无扩展名 sh shim，改用 profile 内的 dsh 入口经 node 启动），其次 profile 内的 dsh 入口；两者都没有才返回 `no_dsh_bin`。
-- 其他实例的原地重启仍在原端口进行：stop 与 start 之间端口是空的，被别的进程抢到即返回 `port_in_use`；端口 15 秒内未释放返回 `port_still_in_use`。两种情况都不会改用其他端口。
-- 没有 tmux 或 screen 时，当前实例仍拒绝重启；桌面宿主与远端行始终不可重启。
-- 面板触发的重启把启动 token 交接给浏览器，新实例因此能直接打开；agent 工具触发的重启保持无头（启动参数带 `--no-open`）。
+- **当前实例走交接。** 检测到 tmux 或 screen 时，在该会话里用起始端口段内的空闲端口启动替代实例，它应答 `action=self` 后，面板把它带启动 token 的绝对 URL 交给浏览器跳转，旧进程随后退出。
+- **交接前先确认 token 可用。** token 只取替代实例这次启动写下的那一行，且交付前先用一次回环请求确认它能换到 cookie，主机名沿用浏览器访问面板时用的那个，而替代实例就绪前旧实例一直服务面板，因此没有端口空窗。
+- 面板发起的启动与重启优先在 tmux（其次 screen）里执行 `dsh web`，实例因此不随面板宿主退出，没有这两种工具时回退到直接派生。
+- 启动器优先取 `PATH` 上的 `dsh`（仅 POSIX，Windows 上那是无法 spawn 的无扩展名 sh shim，改用 profile 内的 dsh 入口经 node 启动），其次 profile 内的 dsh 入口，两者都没有才返回 `no_dsh_bin`。
+- 其他实例的原地重启仍在原端口进行：stop 与 start 之间端口是空的，被别的进程抢到即返回 `port_in_use`，端口 15 秒内未释放返回 `port_still_in_use`。两种情况都不会改用其他端口。
+- 没有 tmux 或 screen 时，当前实例仍拒绝重启，桌面宿主与远端行始终不可重启。
+- 面板触发的重启把启动 token 交接给浏览器，新实例因此能直接打开，agent 工具触发的重启保持无头（启动参数带 `--no-open`）。
 
 ## 开发
 
-工程边界与提交前检查见 [AGENTS.md](https://github.com/xswt442-cmd/dsh-instance-manager/blob/main/AGENTS.md)；发布流程见 [docs/RELEASING.md](https://github.com/xswt442-cmd/dsh-instance-manager/blob/main/docs/RELEASING.md)。
+工程边界与提交前检查见 [AGENTS.md](https://github.com/xswt442-cmd/dsh-instance-manager/blob/main/AGENTS.md)。发布流程见 [docs/RELEASING.md](https://github.com/xswt442-cmd/dsh-instance-manager/blob/main/docs/RELEASING.md)。
 
 ## License
 

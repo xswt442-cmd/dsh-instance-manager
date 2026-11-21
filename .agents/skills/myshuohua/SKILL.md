@@ -115,5 +115,4 @@ lint 报告的命中项必须处理或说明保留理由；没报告的句子也
 
 ## 参考
 
-- [references/language-zh.md](references/language-zh.md)：常见用词和句式问题，包含模糊指代、空泛动作和信息保真对照。
-- [references/bad-good.md](references/bad-good.md)：整段对照，含重复句、无谓扩写和语义改变的反例，说明为什么错。
+- [references/language-zh.md](references/language-zh.md)：19 条用词与句式问题，每条一句判据加一组正反例。上面第二、三步的细节都能在那里查到。
